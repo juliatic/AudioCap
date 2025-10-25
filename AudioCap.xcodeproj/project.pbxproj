@@ -19,6 +19,8 @@
 		F47AD9442BF5B61E005B75AC /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47AD9432BF5B61E005B75AC /* RootView.swift */; };
 		F47AD9462BF5B61F005B75AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F47AD9452BF5B61F005B75AC /* Assets.xcassets */; };
 		F47AD9492BF5B61F005B75AC /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F47AD9482BF5B61F005B75AC /* Preview Assets.xcassets */; };
+		F4AA00032BF8000000D918A3 /* RecordingSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4AA00012BF8000000D918A3 /* RecordingSettings.swift */; };
+		F4AA00042BF8000000D918A3 /* SilenceDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4AA00022BF8000000D918A3 /* SilenceDetector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +40,8 @@
 		F47AD9452BF5B61F005B75AC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F47AD9482BF5B61F005B75AC /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		F47AD94A2BF5B61F005B75AC /* AudioCap.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AudioCap.entitlements; sourceTree = "<group>"; };
+		F4AA00012BF8000000D918A3 /* RecordingSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingSettings.swift; sourceTree = "<group>"; };
+		F4AA00022BF8000000D918A3 /* SilenceDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +101,8 @@
 				F43172992BF7A51A00D918A3 /* RecordingView.swift */,
 				F431729B2BF7B66A00D918A3 /* FileProxyView.swift */,
 				F43172A02BF7BF1300D918A3 /* RecordingIndicator.swift */,
+				F4AA00012BF8000000D918A3 /* RecordingSettings.swift */,
+				F4AA00022BF8000000D918A3 /* SilenceDetector.swift */,
 				F431728E2BF691D900D918A3 /* Info.plist */,
 				F47AD9452BF5B61F005B75AC /* Assets.xcassets */,
 				F47AD94A2BF5B61F005B75AC /* AudioCap.entitlements */,
@@ -193,6 +199,8 @@
 				F43172A12BF7BF1300D918A3 /* RecordingIndicator.swift in Sources */,
 				F43172962BF787C300D918A3 /* CoreAudioUtils.swift in Sources */,
 				F431729C2BF7B66A00D918A3 /* FileProxyView.swift in Sources */,
+				F4AA00032BF8000000D918A3 /* RecordingSettings.swift in Sources */,
+				F4AA00042BF8000000D918A3 /* SilenceDetector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -325,21 +333,26 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = AudioCap/AudioCap.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"AudioCap/Preview Content\"";
-				DEVELOPMENT_TEAM = 8C7439RJLG;
+				DEVELOPMENT_TEAM = RHP4RPPJPU;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioCap/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Audio Cap PRO";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -351,21 +364,26 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = AudioCap/AudioCap.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"AudioCap/Preview Content\"";
-				DEVELOPMENT_TEAM = 8C7439RJLG;
+				DEVELOPMENT_TEAM = RHP4RPPJPU;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioCap/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Audio Cap PRO";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

@@ -1,4 +1,6 @@
 import SwiftUI
+import UniformTypeIdentifiers
+import Observation
 
 @MainActor
 struct ProcessSelectionView: View {
@@ -7,6 +9,7 @@ struct ProcessSelectionView: View {
     @State private var recorder: ProcessTapRecorder?
 
     @State private var selectedProcess: AudioProcess?
+    @State private var settings = RecordingSettings.shared
 
     var body: some View {
         Section {
@@ -77,7 +80,7 @@ struct ProcessSelectionView: View {
         guard let tap else { return }
 
         let filename = "\(tap.process.name)-\(Int(Date.now.timeIntervalSinceReferenceDate))"
-        let audioFileURL = URL.applicationSupport.appendingPathComponent(filename, conformingTo: .wav)
+        let audioFileURL = URL.applicationSupport.appendingPathComponent(filename, conformingTo: settings.outputFormat.utType)
 
         let newRecorder = ProcessTapRecorder(fileURL: audioFileURL, tap: tap)
         self.recorder = newRecorder
