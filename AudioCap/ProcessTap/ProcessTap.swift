@@ -413,20 +413,52 @@ final class ProcessTapRecorder {
             throw "Failed to initialize audio converter"
         }
 
-        while true {
-            let chunk: AVAudioFrameCount = 2048
-            guard let inBuf = AVAudioPCMBuffer(pcmFormat: srcFormat, frameCapacity: chunk) else { break }
-            try srcFile.read(into: inBuf)
-            if inBuf.frameLength == 0 { break }
+        let chunk: AVAudioFrameCount = 4096
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: srcFormat, frameCapacity: chunk) else { throw "Alloc in buffer failed" }
+        guard let outBuf = AVAudioPCMBuffer(pcmFormat: dstFile.processingFormat, frameCapacity: chunk) else { throw "Alloc out buffer failed" }
 
-            guard let outBuf = AVAudioPCMBuffer(pcmFormat: dstFile.processingFormat, frameCapacity: inBuf.frameLength) else { throw "Alloc out buffer failed" }
+        var endOfSource = false
+        var readError: Error?
+
+        while true {
             var error: NSError?
             let status = converter.convert(to: outBuf, error: &error) { _, outStatus in
-                outStatus.pointee = AVAudioConverterInputStatus.haveData
-                return inBuf
+                if endOfSource || readError != nil {
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
+                
+                do {
+                    try srcFile.read(into: inBuf)
+                    
+                    if inBuf.frameLength == 0 {
+                        endOfSource = true
+                        outStatus.pointee = .endOfStream
+                        return nil
+                    }
+                    
+                    outStatus.pointee = .haveData
+                    return inBuf
+                } catch {
+                    readError = error
+                    outStatus.pointee = .endOfStream
+                    return nil
+                }
             }
-            if status == .error { throw error ?? "Audio conversion failed" }
-            try dstFile.write(from: outBuf)
+            
+            if let error = readError { throw error }
+            
+            if status == .error {
+                throw error ?? "Audio conversion failed"
+            }
+            
+            if outBuf.frameLength > 0 {
+                try dstFile.write(from: outBuf)
+            }
+            
+            if status == .endOfStream {
+                break
+            }
         }
     }
 }
