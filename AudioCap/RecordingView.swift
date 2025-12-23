@@ -57,6 +57,7 @@ struct RecordingView: View {
                 Toggle(isOn: $settings.autoSplitOnSilence) {
                     Text("Auto-split on silence")
                 }
+                .tint(.green)
                 .accessibilityLabel(Text("Auto-split on silence"))
 
                 HStack(spacing: 8) {
@@ -74,16 +75,17 @@ struct RecordingView: View {
 
                 HStack(spacing: 8) {
                     LabeledContent("Threshold (dB)") {
-                        TextField("-40", value: $settings.silenceThresholdDb, format: .number)
+                        TextField("", value: $settings.silenceThresholdDb, format: .number)
                             .frame(width: 80)
+                            .textFieldStyle(.roundedBorder)
                     }
                     LabeledContent("Min silence (s)") {
-                        TextField("2.0", value: $settings.minSilenceDuration, format: .number)
+                        TextField("", value: $settings.minSilenceDuration, format: .number)
                             .frame(width: 80)
+                            .textFieldStyle(.roundedBorder)
                     }
                 }
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                // Keep inputs looking like editable fields
             }
             // Allow editing threshold/min during recording; changes apply to next session
         } header: {

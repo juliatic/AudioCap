@@ -139,6 +139,23 @@ final class ProcessTap {
             throw "Failed to create aggregate device: \(err)"
         }
 
+        var sampleRate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        err = AudioObjectGetPropertyData(aggregateDeviceID, &address, 0, nil, &size, &sampleRate)
+
+        if err == noErr && sampleRate > 0 {
+            // Update the stream description to match the aggregate device's sample rate,
+            // as the I/O Proc will deliver data at this rate.
+            self.tapStreamDescription?.mSampleRate = sampleRate
+        } else {
+            logger.warning("Failed to read aggregate device sample rate: \(err)")
+        }
+
         logger.debug("Created aggregate device #\(self.aggregateDeviceID, privacy: .public)")
     }
 
