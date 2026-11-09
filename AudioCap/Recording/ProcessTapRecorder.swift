@@ -396,6 +396,7 @@ final class ProcessTapRecorder {
             if let error = tap.lastFormatValidationError { lines.append("Format validation: \(error)") }
             if let error = tap.errorMessage { lines.append("Tap error: \(error)") }
             lines.append(contentsOf: HiResController.shared.diagnosticsLines)
+            lines.append(contentsOf: tap.ioHistory.map { "I/O history: \($0)" })
         }
         lines.append("Capture format: \(captureFormat?.description ?? "none")")
         lines.append("I/O cycles with no pipeline attached: \(unattachedCycles.value.load(ordering: .relaxed))")
