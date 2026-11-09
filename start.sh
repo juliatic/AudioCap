@@ -36,8 +36,10 @@ Usage: ./start.sh [option]
   --no-install         Build into ./build/AudioCap.app only: /Applications
                        is not touched and nothing is opened.
   --test               Run the unit tests (scheme AudioCap, target AudioCapTests).
-  --install-driver     Install the AudioCap Hi-Res virtual device (not available yet).
-  --uninstall-driver   Remove the AudioCap Hi-Res virtual device (not available yet).
+  --install-driver     Install the AudioCap Hi-Res virtual device into
+                       /Library/Audio/Plug-Ins/HAL (one administrator prompt,
+                       restarts Core Audio). Builds first if needed.
+  --uninstall-driver   Remove the AudioCap Hi-Res virtual device.
   -h, --help           Show this help.
 
 Signing: the build is ad-hoc signed ("Sign to Run Locally") unless the
@@ -56,6 +58,8 @@ bundle-id change).
 Environment: AUDIOCAP_BUILD_TIMEOUT and AUDIOCAP_TEST_TIMEOUT (seconds,
 default 900) bound xcodebuild so the script can never hang.
 AUDIOCAP_INSTALL_DIR overrides /Applications.
+The default flow offers to install the Hi-Res device once when it is missing;
+AUDIOCAP_INSTALL_DRIVER=yes|no answers that question without a prompt.
 USAGE
 }
 
@@ -309,18 +313,97 @@ run_tests() {
     say "Unit tests passed. Full log: build/test.log"
 }
 
-# --- HOOK: Hi-Res virtual device driver -------------------------------------
-# The Hi-Res mode change (plan section 2b) replaces these two functions with
-# the real install/uninstall of the "AudioCap Hi-Res" AudioServerPlugIn into
-# /Library/Audio/Plug-Ins/HAL/ and, once the driver exists, calls
-# install_driver from the default (no option) flow below.
+# --- Hi-Res virtual device driver -------------------------------------------
+# "AudioCap Hi-Res" is an AudioServerPlugIn (target AudioCapHiRes) embedded in
+# the app bundle. It is copied into /Library/Audio/Plug-Ins/HAL/ with one
+# administrator prompt, then coreaudiod is restarted so it appears.
+DRIVER_NAME="AudioCapHiRes.driver"
+HAL_DIR="${AUDIOCAP_HAL_DIR:-/Library/Audio/Plug-Ins/HAL}"
+INSTALLED_DRIVER="$HAL_DIR/$DRIVER_NAME"
+BUILT_DRIVER="$APP_PATH/Contents/Resources/$DRIVER_NAME"
+DRIVER_DECLINED_MARK="$BUILD_DIR/.hi-res-driver-declined"
+
+driver_is_current() {
+    [ -d "$INSTALLED_DRIVER" ] && [ -d "$BUILT_DRIVER" ] &&
+        cmp -s "$INSTALLED_DRIVER/Contents/MacOS/AudioCapHiRes" "$BUILT_DRIVER/Contents/MacOS/AudioCapHiRes"
+}
+
+# Runs one root shell command: a single administrator prompt for the whole step.
+run_as_admin() {
+    if [ "$(id -u)" -eq 0 ]; then
+        with_timeout 300 /bin/sh -c "$1"
+    elif sudo -n true 2>/dev/null; then
+        with_timeout 300 sudo /bin/sh -c "$1"
+    elif [ -t 0 ]; then
+        say "Enter your administrator password (asked once)"
+        with_timeout "$SUDO_TIMEOUT" sudo -v || return 1
+        with_timeout 300 sudo /bin/sh -c "$1"
+    else
+        warn "Administrator rights are needed and there is no terminal to ask for a password."
+        return 1
+    fi
+}
+
+restart_coreaudio_cmd='launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null || killall coreaudiod 2>/dev/null || true'
+
+copy_driver() {
+    [ -d "$BUILT_DRIVER" ] || die "The build has no $DRIVER_NAME (expected $BUILT_DRIVER)."
+    say "Installing the AudioCap Hi-Res device into $HAL_DIR and restarting Core Audio (audio stops for a moment)..."
+    local staging="$HAL_DIR/.$DRIVER_NAME.installing"
+    run_as_admin "mkdir -p '$HAL_DIR' && rm -rf '$staging' && ditto '$BUILT_DRIVER' '$staging' && rm -rf '$INSTALLED_DRIVER' && mv '$staging' '$INSTALLED_DRIVER' && chown -R root:wheel '$INSTALLED_DRIVER' && { $restart_coreaudio_cmd; }" ||
+        die "Installing $DRIVER_NAME failed; nothing else was changed."
+    rm -f "$DRIVER_DECLINED_MARK"
+    say "Installed $INSTALLED_DRIVER. AudioCap uses it while recording (Settings > Hi-Res mode)."
+}
+
 install_driver() {
-    die "--install-driver is not available yet: the AudioCap Hi-Res driver is planned (docs/planning/01_improvement_plan.md, section 2b)." 2
+    if [ ! -d "$BUILT_DRIVER" ]; then
+        check_xcode
+        build_app
+    fi
+    copy_driver
 }
+
 uninstall_driver() {
-    die "--uninstall-driver is not available yet: the AudioCap Hi-Res driver is planned (docs/planning/01_improvement_plan.md, section 2b)." 2
+    if [ ! -e "$INSTALLED_DRIVER" ]; then
+        say "$INSTALLED_DRIVER is not installed; nothing to remove."
+        return 0
+    fi
+    say "Removing $INSTALLED_DRIVER and restarting Core Audio..."
+    run_as_admin "rm -rf '$INSTALLED_DRIVER' && { $restart_coreaudio_cmd; }" ||
+        die "Removing $DRIVER_NAME failed."
+    touch "$DRIVER_DECLINED_MARK" 2>/dev/null || true
+    say "Removed. Run ./start.sh --install-driver to install it again."
 }
-# --- end HOOK ----------------------------------------------------------------
+
+# Default flow: offer the driver once when it is missing (or older than the build).
+# AUDIOCAP_INSTALL_DRIVER=yes|no answers without a prompt.
+offer_driver() {
+    driver_is_current && return 0
+    local what="install the AudioCap Hi-Res virtual device (records at up to 192 kHz whatever your speakers support)"
+    [ -d "$INSTALLED_DRIVER" ] && what="update the installed AudioCap Hi-Res virtual device"
+    local answer="${AUDIOCAP_INSTALL_DRIVER:-}"
+    if [ -z "$answer" ]; then
+        if [ -e "$DRIVER_DECLINED_MARK" ] && [ ! -d "$INSTALLED_DRIVER" ]; then
+            say "Hi-Res device not installed (declined earlier). Run ./start.sh --install-driver to add it."
+            return 0
+        fi
+        if [ ! -t 0 ]; then
+            say "Hi-Res device not installed or outdated. Run ./start.sh --install-driver from Terminal to $what."
+            return 0
+        fi
+        printf '==> %s? It needs your administrator password once. [y/N] ' "Do you want to $what" >&2
+        read -r -t 120 answer || answer=""
+    fi
+    case "$answer" in
+        y|Y|yes|YES|Yes) copy_driver ;;
+        *)
+            mkdir -p "$BUILD_DIR" && touch "$DRIVER_DECLINED_MARK"
+            say "Skipped the Hi-Res device. Run ./start.sh --install-driver at any time."
+            ;;
+    esac
+}
+# --- end Hi-Res driver -------------------------------------------------------
 
 main() {
     local mode="run"
@@ -348,7 +431,7 @@ main() {
         test) check_xcode; run_tests ;;
         build) check_xcode; build_app ;;
         install) check_xcode; build_app; install_app ;;
-        run) check_xcode; build_app; install_app; open_app ;;
+        run) check_xcode; build_app; install_app; offer_driver; open_app ;;
     esac
 }
 

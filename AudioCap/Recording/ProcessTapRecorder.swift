@@ -67,6 +67,8 @@ final class ProcessTapRecorder {
     }
 
     private struct IOState {
+        /// Hi-Res monitor that plays a copy of the captured audio on the real output device.
+        var monitor: AudioMonitor?
         var format: CaptureFormat?
         var writerFormat: AVAudioFormat?
         var session: SessionSettings?
@@ -122,6 +124,7 @@ final class ProcessTapRecorder {
             io = IOState()
             io.session = session
         }
+        HiResController.shared.begin(for: tap)
 
         do {
             let format = try tap.start(on: ioQueue, ioBlock: { [weak self] _, inputData, _, _, _ in
@@ -137,6 +140,7 @@ final class ProcessTapRecorder {
             }
         } catch {
             ioQueue.sync { io = IOState() }
+            HiResController.shared.end()
             lastError = error.audioCapDescription
             logger.error("Start failed: \(error.audioCapDescription, privacy: .public)")
             throw error
@@ -155,7 +159,9 @@ final class ProcessTapRecorder {
             io.format = nil
             finishTake()
             io.session = nil
+            io.monitor = nil
         }
+        HiResController.shared.end()
         status = .idle
         stopMeterTimer()
     }
@@ -197,6 +203,9 @@ final class ProcessTapRecorder {
             io.writerFormat = format.writerFormat
         }
         if previous != format { captureFormat = format }
+        HiResController.shared.formatChanged(format)
+        let monitor = HiResController.shared.activeMonitor
+        ioQueue.sync { io.monitor = monitor }
     }
 
     // MARK: - I/O path (ioQueue)
@@ -214,6 +223,7 @@ final class ProcessTapRecorder {
         let buffer = copy.buffer
         let level = AudioLevel(measuring: buffer)
         meter.withLock { $0.level = level }
+        io.monitor?.push(buffer)
 
         if io.session!.autoSplit {
             let analysis = io.session!.detector.process(level: level, duration: Double(buffer.frameLength) / buffer.format.sampleRate)
@@ -385,6 +395,7 @@ final class ProcessTapRecorder {
             lines.append("Aggregate nominal rate: \(tap.aggregateSampleRate.map { "\($0) Hz" } ?? "unavailable")")
             if let error = tap.lastFormatValidationError { lines.append("Format validation: \(error)") }
             if let error = tap.errorMessage { lines.append("Tap error: \(error)") }
+            lines.append(contentsOf: HiResController.shared.diagnosticsLines)
         }
         lines.append("Capture format: \(captureFormat?.description ?? "none")")
         let writerFormat = captureFormat?.writerFormat

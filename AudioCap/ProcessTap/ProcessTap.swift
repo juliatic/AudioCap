@@ -344,6 +344,23 @@ final class ProcessTap {
         pendingRebuild = nil
     }
 
+    /// Rebuilds the aggregate on the current default output now, if it changed (Hi-Res routing switches the output).
+    @MainActor
+    func syncAggregateWithDefaultOutput() {
+        guard activated else { return activate() }
+        pendingRebuild?.cancel()
+        pendingRebuild = nil
+        rebuildAggregate(reason: "Hi-Res routing changed the output", force: false)
+    }
+
+    /// Rebuilds the aggregate even if the output device is the same, e.g. after its nominal rate changed.
+    @MainActor
+    func forceReconfigure(reason: String) {
+        pendingRebuild?.cancel()
+        pendingRebuild = nil
+        rebuildAggregate(reason: reason, force: true)
+    }
+
     private func scheduleRebuild(reason: String, delay: TimeInterval, force: Bool = false) {
         pendingRebuild?.cancel()
         let work = DispatchWorkItem { [weak self] in

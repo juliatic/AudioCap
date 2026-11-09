@@ -1,7 +1,172 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-
+    "AudioCap Hi-Res disappeared. The output is back on %@; recording continues at that device's rate." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AudioCap Hi-Res ha desaparecido. La salida vuelve a %@ y la grabación sigue a la frecuencia de ese dispositivo."
+          }
+        }
+      }
+    },
+    "Driver installed" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controlador instalado"
+          }
+        }
+      }
+    },
+    "Hi-Res could not start: %@. Recording without it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo activar Hi-Res: %@. Se graba sin él."
+          }
+        }
+      }
+    },
+    "Hi-Res is on. Recording switches the system output to AudioCap Hi-Res and restores it when you stop." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hi-Res está activado. Al grabar, la salida del sistema pasa a AudioCap Hi-Res y se restaura al detener."
+          }
+        }
+      }
+    },
+    "Hi-Res mode" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo Hi-Res"
+          }
+        }
+      }
+    },
+    "Hi-Res: %@ (%@) · monitor: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hi-Res: %1$@ (%2$@) · monitor: %3$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hi-Res: %1$@ (%2$@) · escucha: %3$@"
+          }
+        }
+      }
+    },
+    "Monitor unavailable: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escucha no disponible: %@"
+          }
+        }
+      }
+    },
+    "Monitor volume" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volumen de escucha"
+          }
+        }
+      }
+    },
+    "Music.app recordings use the sample rate of the current track. Other apps, or tracks with an unknown rate, use this rate." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las grabaciones de Música usan la frecuencia de muestreo de la pista actual. Las demás apps, y las pistas cuya frecuencia se desconoce, usan esta."
+          }
+        }
+      }
+    },
+    "Mute monitor" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Silenciar escucha"
+          }
+        }
+      }
+    },
+    "Rate for other apps" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frecuencia para otras apps"
+          }
+        }
+      }
+    },
+    "Restored the output to %@ after AudioCap last quit unexpectedly." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se ha restaurado la salida a %@ porque AudioCap se cerró de forma inesperada la última vez."
+          }
+        }
+      }
+    },
+    "The AudioCap Hi-Res driver is not installed. Run ./start.sh --install-driver, then reopen AudioCap." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El controlador AudioCap Hi-Res no está instalado. Ejecuta ./start.sh --install-driver y vuelve a abrir AudioCap."
+          }
+        }
+      }
+    },
+    "While recording, apps play into the silent AudioCap Hi-Res device at a high sample rate, and AudioCap plays a copy on your speakers or headphones. Only that copy is resampled." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mientras grabas, las apps suenan en el dispositivo silencioso AudioCap Hi-Res a una frecuencia de muestreo alta y AudioCap reproduce una copia en tus altavoces o auriculares. Solo esa copia se remuestrea."
+          }
+        }
+      }
+    },
+    "fixed rate" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "frecuencia fija"
+          }
+        }
+      }
+    },
+    "track rate" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "frecuencia de la pista"
+          }
+        }
+      }
+    }
   },
   "version" : "1.0"
 }

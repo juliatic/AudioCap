@@ -47,6 +47,8 @@ struct RecordingView: View {
                     .font(.callout)
             }
 
+            HiResStatusView()
+
             if recorder.status == .waitingForSource {
                 Text("Waiting for \(recorder.process.name) to start again…")
                     .foregroundStyle(.secondary)

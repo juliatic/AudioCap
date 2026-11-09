@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A1C0FF012EB0000000000001 /* test.wav in Resources */ = {isa = PBXBuildFile; fileRef = A1C0FF022EB0000000000001 /* test.wav */; };
 		A1C0FF012EB0000000000002 /* test.flac in Resources */ = {isa = PBXBuildFile; fileRef = A1C0FF022EB0000000000002 /* test.flac */; };
+		B1C0FF0E2EB0000000000001 /* AudioCapHiRes.driver in Embed Hi-Res Driver */ = {isa = PBXBuildFile; fileRef = B1C0FF012EB0000000000001 /* AudioCapHiRes.driver */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -19,13 +20,35 @@
 			remoteGlobalIDString = F47AD93D2BF5B61E005B75AC;
 			remoteInfo = AudioCap;
 		};
+		B1C0FF0B2EB0000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F47AD9362BF5B61E005B75AC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1C0FF072EB0000000000001;
+			remoteInfo = AudioCapHiRes;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1C0FF0D2EB0000000000001 /* Embed Hi-Res Driver */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				B1C0FF0E2EB0000000000001 /* AudioCapHiRes.driver in Embed Hi-Res Driver */,
+			);
+			name = "Embed Hi-Res Driver";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A1C0FF022EB0000000000001 /* test.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = test.wav; sourceTree = "<group>"; };
 		A1C0FF022EB0000000000002 /* test.flac */ = {isa = PBXFileReference; lastKnownFileType = file; path = test.flac; sourceTree = "<group>"; };
 		A1C0FF042EB0000000000001 /* AudioCapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AudioCapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F47AD93E2BF5B61E005B75AC /* AudioCap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudioCap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1C0FF012EB0000000000001 /* AudioCapHiRes.driver */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AudioCapHiRes.driver; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -38,6 +61,13 @@
 				Info.plist,
 			);
 			target = F47AD93D2BF5B61E005B75AC /* AudioCap */;
+		};
+		B1C0FF032EB0000000000001 /* Exceptions for "AudioCapHiRes" folder in "AudioCapHiRes" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B1C0FF072EB0000000000001 /* AudioCapHiRes */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -55,6 +85,14 @@
 			path = AudioCap;
 			sourceTree = "<group>";
 		};
+		B1C0FF022EB0000000000001 /* AudioCapHiRes */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B1C0FF032EB0000000000001 /* Exceptions for "AudioCapHiRes" folder in "AudioCapHiRes" target */,
+			);
+			path = AudioCapHiRes;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +104,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F47AD93B2BF5B61E005B75AC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C0FF052EB0000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -90,6 +135,7 @@
 				F47AD9402BF5B61E005B75AC /* AudioCap */,
 				A1C0FF062EB0000000000001 /* AudioCapTests */,
 				A1C0FF082EB0000000000001 /* Fixtures */,
+				B1C0FF022EB0000000000001 /* AudioCapHiRes */,
 				F47AD93F2BF5B61E005B75AC /* Products */,
 			);
 			sourceTree = "<group>";
@@ -99,6 +145,7 @@
 			children = (
 				F47AD93E2BF5B61E005B75AC /* AudioCap.app */,
 				A1C0FF042EB0000000000001 /* AudioCapTests.xctest */,
+				B1C0FF012EB0000000000001 /* AudioCapHiRes.driver */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,10 +181,12 @@
 				F47AD93A2BF5B61E005B75AC /* Sources */,
 				F47AD93B2BF5B61E005B75AC /* Frameworks */,
 				F47AD93C2BF5B61E005B75AC /* Resources */,
+				B1C0FF0D2EB0000000000001 /* Embed Hi-Res Driver */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B1C0FF0C2EB0000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F47AD9402BF5B61E005B75AC /* AudioCap */,
@@ -146,6 +195,26 @@
 			productName = AudioCap;
 			productReference = F47AD93E2BF5B61E005B75AC /* AudioCap.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B1C0FF072EB0000000000001 /* AudioCapHiRes */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1C0FF082EB0000000000001 /* Build configuration list for PBXNativeTarget "AudioCapHiRes" */;
+			buildPhases = (
+				B1C0FF042EB0000000000001 /* Sources */,
+				B1C0FF052EB0000000000001 /* Frameworks */,
+				B1C0FF062EB0000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B1C0FF022EB0000000000001 /* AudioCapHiRes */,
+			);
+			name = AudioCapHiRes;
+			productName = AudioCapHiRes;
+			productReference = B1C0FF012EB0000000000001 /* AudioCapHiRes.driver */;
+			productType = "com.apple.product-type.bundle";
 		};
 /* End PBXNativeTarget section */
 
@@ -160,6 +229,9 @@
 					A1C0FF092EB0000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = F47AD93D2BF5B61E005B75AC;
+					};
+					B1C0FF072EB0000000000001 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 					F47AD93D2BF5B61E005B75AC = {
 						CreatedOnToolsVersion = 15.3;
@@ -183,6 +255,7 @@
 			targets = (
 				F47AD93D2BF5B61E005B75AC /* AudioCap */,
 				A1C0FF092EB0000000000001 /* AudioCapTests */,
+				B1C0FF072EB0000000000001 /* AudioCapHiRes */,
 			);
 		};
 /* End PBXProject section */
@@ -198,6 +271,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F47AD93C2BF5B61E005B75AC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C0FF062EB0000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -221,6 +301,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1C0FF042EB0000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -228,6 +315,11 @@
 			isa = PBXTargetDependency;
 			target = F47AD93D2BF5B61E005B75AC /* AudioCap */;
 			targetProxy = A1C0FF032EB0000000000001 /* PBXContainerItemProxy */;
+		};
+		B1C0FF0C2EB0000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1C0FF072EB0000000000001 /* AudioCapHiRes */;
+			targetProxy = B1C0FF0B2EB0000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -439,6 +531,48 @@
 			};
 			name = Release;
 		};
+		B1C0FF092EB0000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AudioCapHiRes/Info.plist;
+				INSTALL_PATH = /Library/Audio/Plug-Ins/HAL;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				OTHER_LDFLAGS = (
+					"-framework",
+					CoreAudio,
+					"-framework",
+					CoreFoundation,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.juliatic.AudioCap.HiResDriver;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = driver;
+			};
+			name = Debug;
+		};
+		B1C0FF0A2EB0000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AudioCapHiRes/Info.plist;
+				INSTALL_PATH = /Library/Audio/Plug-Ins/HAL;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				OTHER_LDFLAGS = (
+					"-framework",
+					CoreAudio,
+					"-framework",
+					CoreFoundation,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.juliatic.AudioCap.HiResDriver;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = driver;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -465,6 +599,15 @@
 			buildConfigurations = (
 				F47AD94E2BF5B61F005B75AC /* Debug */,
 				F47AD94F2BF5B61F005B75AC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1C0FF082EB0000000000001 /* Build configuration list for PBXNativeTarget "AudioCapHiRes" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1C0FF092EB0000000000001 /* Debug */,
+				B1C0FF0A2EB0000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
