@@ -10,7 +10,7 @@ final class CaptureWriterTests: TemporaryDirectoryTestCase {
         // Odd chunk sizes, like real I/O cycles.
         for size in [512, 471, 1_024, 333].cycled(while: { offset < 220_500 }) {
             let n = min(size, 220_500 - offset)
-            writer.append(Synth.slice(source, from: offset, count: n))
+            writer.write(Synth.slice(source, from: offset, count: n))
             offset += n
         }
         XCTAssertEqual(try writer.finish(), 220_500)
@@ -24,8 +24,7 @@ final class CaptureWriterTests: TemporaryDirectoryTestCase {
     func testCaptureIsReadableBeforeClose() throws {
         let source = Synth.buffer(frames: 48_000, sampleRate: 48_000)
         let writer = try CaptureWriter(url: url("open.caf"), format: source.format)
-        writer.append(source)
-        writer.drain()
+        writer.write(source)
         // A crash at this point leaves a CAF that still opens with the audio written so far.
         let length = try AVAudioFile(forReading: url("open.caf")).length
         XCTAssertGreaterThan(length, 0)
@@ -35,7 +34,7 @@ final class CaptureWriterTests: TemporaryDirectoryTestCase {
     func testFinishTwiceThrows() throws {
         let source = Synth.buffer(frames: 100)
         let writer = try CaptureWriter(url: url("twice.caf"), format: source.format)
-        writer.append(source)
+        writer.write(source)
         XCTAssertEqual(try writer.finish(), 100)
         XCTAssertThrowsError(try writer.finish()) { error in
             XCTAssertEqual(error as? CaptureWriter.WriterError, .alreadyFinished)
@@ -44,7 +43,7 @@ final class CaptureWriterTests: TemporaryDirectoryTestCase {
 
     func testRejectsBufferInAnotherFormat() throws {
         let writer = try CaptureWriter(url: url("mismatch.caf"), format: Synth.buffer(frames: 1).format)
-        writer.append(Synth.buffer(frames: 100, sampleRate: 96_000))
+        writer.write(Synth.buffer(frames: 100, sampleRate: 96_000))
         XCTAssertThrowsError(try writer.finish())
     }
 }
