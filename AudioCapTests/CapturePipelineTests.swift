@@ -156,7 +156,8 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
             XCTAssertEqual(takes.count, 2)
             XCTAssertNil(takes.first?.warning)
             let warning = try XCTUnwrap(takes.last?.warning)
-            XCTAssertTrue(warning.contains("may start up to 0.400 s late"), warning)
+            let shown = silentCycles == 0 ? "0.400" : "0.800" // the uncaptured gap plus the zeros after it
+            XCTAssertTrue(warning.contains("may start up to \(shown) s late"), warning)
             XCTAssertFalse(warning.contains("reconnected"), warning)
             XCTAssertEqual(pipeline.idleRefreshes.load(ordering: .relaxed), 1)
             XCTAssertEqual(pipeline.idleRefreshGapFrames.load(ordering: .relaxed), 19_200)

@@ -103,6 +103,7 @@ final class CapturePipeline: @unchecked Sendable {
     private var lastCycleEndHost: UInt64 = 0
     private var awaitingRefreshEnd = false
     /// Uncaptured frames of the last idle refresh, and frames since it ended (`Int.max` once past `lateStartFrames`).
+    /// A fresh tap can deliver zeros for its first cycles, so a late start counts both.
     private var refreshGap = 0
     private var framesSinceRefresh = Int.max
 
@@ -235,7 +236,7 @@ final class CapturePipeline: @unchecked Sendable {
             pendingDropoutFrames = 0
             lastEdge = endEdge
             if framesSinceRefresh <= lateStartFrames {
-                timeline.push(.init(kind: .lateStart, position: ring.producedFrames, frames: refreshGap))
+                timeline.push(.init(kind: .lateStart, position: ring.producedFrames, frames: refreshGap + framesSinceRefresh))
                 framesSinceRefresh = .max
             }
         }
