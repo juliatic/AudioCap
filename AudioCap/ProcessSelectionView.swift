@@ -58,17 +58,12 @@ struct ProcessSelectionView: View {
                     .foregroundStyle(.red)
             } else if let recorder {
                 RecordingView(recorder: recorder)
-                    .onChange(of: recorder.isRecording) { wasRecording, isRecording in
-                        /// Each recorder instance can only record a single file, so we create a new file/recorder when recording stops.
-                        if wasRecording, !isRecording {
-                            createRecorder()
-                        }
-                    }
             }
         }
     }
 
     private func setupRecording(for process: AudioProcess) {
+        teardownTap()
         let newTap = ProcessTap(process: process)
         self.tap = newTap
         newTap.activate()
@@ -79,14 +74,13 @@ struct ProcessSelectionView: View {
     private func createRecorder() {
         guard let tap else { return }
 
-        let filename = "\(tap.process.name)-\(Int(Date.now.timeIntervalSinceReferenceDate))"
-        let audioFileURL = URL.applicationSupport.appendingPathComponent(filename, conformingTo: settings.outputFormat.utType)
-
-        let newRecorder = ProcessTapRecorder(fileURL: audioFileURL, tap: tap)
-        self.recorder = newRecorder
+        self.recorder = ProcessTapRecorder(tap: tap)
     }
 
     private func teardownTap() {
+        recorder?.stop()
+        recorder = nil
+        tap?.invalidate()
         tap = nil
     }
 }

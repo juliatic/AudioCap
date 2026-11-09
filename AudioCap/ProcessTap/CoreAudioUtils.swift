@@ -47,13 +47,13 @@ extension AudioObjectID {
 
         var err = AudioObjectGetPropertyDataSize(self, &address, 0, nil, &dataSize)
 
-        guard err == noErr else { throw "Error reading data size for \(address): \(err)" }
+        guard err == noErr else { throw CoreAudioError(operation: "Reading the data size of \(address)", status: err) }
 
         var value = [AudioObjectID](repeating: .unknown, count: Int(dataSize) / MemoryLayout<AudioObjectID>.size)
 
         err = AudioObjectGetPropertyData(self, &address, 0, nil, &dataSize, &value)
 
-        guard err == noErr else { throw "Error reading array for \(address): \(err)" }
+        guard err == noErr else { throw CoreAudioError(operation: "Reading \(address)", status: err) }
 
         return value
     }
@@ -170,7 +170,7 @@ extension AudioObjectID {
         var err = AudioObjectGetPropertyDataSize(self, &address, inQualifierSize, inQualifierData, &dataSize)
 
         guard err == noErr else {
-            throw "Error reading data size for \(inAddress): \(err)"
+            throw CoreAudioError(operation: "Reading the data size of \(inAddress)", status: err)
         }
 
         var value: T = defaultValue
@@ -179,7 +179,7 @@ extension AudioObjectID {
         }
 
         guard err == noErr else {
-            throw "Error reading data for \(inAddress): \(err)"
+            throw CoreAudioError(operation: "Reading \(inAddress)", status: err)
         }
 
         return value

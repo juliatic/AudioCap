@@ -1,6 +1,6 @@
 import SwiftUI
 
-let kAppSubsystem = "codes.rambo.AudioCap"
+let kAppSubsystem = "io.github.juliatic.AudioCap"
 
 @main
 struct AudioCapApp: App {

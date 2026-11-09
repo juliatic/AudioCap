@@ -1,0 +1,7 @@
+// Copy this file to AudioCap/Config/Local.xcconfig (git-ignored) to sign with your
+// Apple developer team. Without it the app is signed ad-hoc and still runs locally.
+// Find your Team ID at https://developer.apple.com/account (Membership details).
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development

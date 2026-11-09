@@ -1,5 +1,5 @@
-// Change the bundle identifier to something unique if you get code signing errors.
-PRODUCT_BUNDLE_IDENTIFIER = codes.rambo.samplecode.AudioCap
+AUDIOCAP_BUNDLE_IDENTIFIER = io.github.juliatic.AudioCap
+PRODUCT_BUNDLE_IDENTIFIER = $(AUDIOCAP_BUNDLE_IDENTIFIER)
 
 VERSIONING_SYSTEM = Apple Generic
 
@@ -10,3 +10,13 @@ INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.utilities
 
 // Private API usage can be disabled by removing the "-D ENABLE_TCC_SPI" flag below.
 OTHER_SWIFT_FLAGS = $(inherited) -D ENABLE_TCC_SPI
+
+// Signing: without a Local.xcconfig the app is signed ad-hoc ("Sign to Run Locally"),
+// so it builds on any Mac with no Apple developer account.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+// Optional, git-ignored per-machine overrides (Team ID, automatic signing).
+// Copy Local.xcconfig.example to Local.xcconfig and fill in your Team ID.
+#include? "Local.xcconfig"
