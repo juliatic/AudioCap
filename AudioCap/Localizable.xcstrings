@@ -741,6 +741,17 @@
         }
       }
     },
+    "Disabling the output unit's input" : {
+      "comment" : "Operation name, inserted into \"%@ failed with %@.\"",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "desactivar la entrada de la unidad de salida"
+          }
+        }
+      }
+    },
     "Done" : {
       "extractionState" : "manual",
       "localizations" : {

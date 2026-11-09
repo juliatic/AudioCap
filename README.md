@@ -18,7 +18,7 @@ Before the rework:
 
 New in this version (details in the plan):
 - **New recording engine** (PR 1): lossless CAF capture, FLAC 24-bit, ALAC, WAV Float32, AAC 256 kbps; length check on every file; decoded error codes with a **Copy diagnostics** button.
-- **Auto-record** (PR 3, "Wait for sound", the default): click **Start** to arm; a take starts when the source makes sound (with half a second of pre-roll) and ends after 2 s of silence (configurable), then it waits again. **Manual** mode records from Start to Stop. Plus an "All system audio" source (everything except AudioCap).
+- **Auto-record** (PR 3, "Wait for sound", the default): click **Start** to arm; a take starts when the source makes sound (with up to half a second of pre-roll: less when the source only starts playing after you click Start) and ends after 2 s of silence (configurable), then it waits again. **Manual** mode records from Start to Stop. Plus an "All system audio" source (everything except AudioCap).
 - **Library and player** (PR 4): every take with its status (recording, converting, done, failed), a player with waveform, a level meter, a **Quality** panel and the output folder `~/Music/AudioCap`.
 - **Hi-Res mode** (PR 6): record at the source's full rate (up to 192 kHz) even when you listen on Bluetooth or display speakers. `./start.sh` offers to install the `AudioCap Hi-Res` device once (or run `./start.sh --install-driver`); turn it off in AudioCap > Settings.
 

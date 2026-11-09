@@ -18,7 +18,7 @@ Antes de rehacerla:
 
 Novedades de esta versión (los detalles están en el plan):
 - **Nuevo motor de grabación** (PR 1): captura sin pérdida en CAF, FLAC de 24 bits, ALAC, WAV Float32 y AAC a 256 kbps; comprobación de duración en cada archivo; códigos de error descifrados y un botón **Copiar diagnóstico**.
-- **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con medio segundo previo) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
+- **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con hasta medio segundo previo: menos si el origen empieza a sonar después de pulsar Start) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
 - **Biblioteca y reproductor** (PR 4): cada toma con su estado (grabando, convirtiendo, lista, con error), un reproductor con forma de onda, un medidor de nivel, un panel de **Calidad** y la carpeta de destino `~/Music/AudioCap`.
 - **Modo Hi-Res** (PR 6): graba a la frecuencia completa del original (hasta 192 kHz) aunque escuches por Bluetooth o por los altavoces de la pantalla. `./start.sh` ofrece instalar una vez el dispositivo `AudioCap Hi-Res` (o ejecuta `./start.sh --install-driver`); se desactiva en AudioCap > Ajustes.
 

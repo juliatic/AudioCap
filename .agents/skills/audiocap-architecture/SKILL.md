@@ -46,7 +46,7 @@ tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossles
 ## Gotchas
 - `1718449215` = `'fmt?'` (unsupported data format): settings and buffers disagree.
 - `560947818` = `'!obj'`: process object gone or no usable output device.
-- A global tap only delivers buffers while something is playing, so the first take's pre-roll can be shorter than 0.5 s.
+- The pre-roll only holds what the tap delivered after Start: if the source starts after arming (or a global tap had nothing playing), the take starts with less than 0.5 s of lead. Accepted as-is.
 - On a VM with BlackHole, `afplay` can hang after an interrupted tap test (audio stuck); `sudo killall coreaudiod` recovers it.
 - Interleaved buffers expose only `floatChannelData[0]`; channel `c` of frame `f` is at `[f * channels + c]`. The upstream `SilenceDetector` indexed `floatChannelData[ch]`.
 - The upstream converter dropped the final partial block (`test.flac`: 3,412 frames short of `test.wav`). Drain until `endOfStream`.
