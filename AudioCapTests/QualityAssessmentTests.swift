@@ -130,6 +130,24 @@ final class QualityAssessmentTests: XCTestCase {
         XCTAssertEqual(recording.capture, stale)
     }
 
+    func testIdleAfterHiResTakeWithRunningSourceDescribesTheCurrentOutput() {
+        // Hi-Res turned off after a take while the source (or "All system audio") keeps running: the tap was made on
+        // AudioCap Hi-Res and still reports 96 kHz, but the next take opens a new tap on BlackHole.
+        let blackHole = QualityPath.Device(name: "BlackHole 2ch", uid: "bh", nominalSampleRate: 48_000, outputChannelCount: 2)
+        let stale = QualityPath.Stream(sampleRate: 96_000, channelCount: 2)
+        let idle = QualityPathBuilder.assemble(sourceName: "All system audio", sourceBundleID: nil, tap: stale, clock: blackHole,
+                                               capture: nil, format: .wav, isRecording: false, isSourceAvailable: true,
+                                               isTapOnCurrentOutput: false)
+        XCTAssertEqual(idle.tap?.sampleRate, 48_000)
+        XCTAssertEqual(idle.file?.sampleRate, 48_000)
+        XCTAssertTrue(QualityAssessment.assess(idle).issues.isEmpty, "no 'Resampled from 96 kHz to 48 kHz' after toggling off")
+
+        let recording = QualityPathBuilder.assemble(sourceName: "All system audio", sourceBundleID: nil, tap: stale, clock: blackHole,
+                                                    capture: stale, format: .wav, isRecording: true, isSourceAvailable: true,
+                                                    isTapOnCurrentOutput: false)
+        XCTAssertEqual(recording.tap?.sampleRate, 96_000, "while recording the panel reports what the tap delivers")
+    }
+
     func testTurningHiResOffRefreshesTheIdlePrediction() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "QualityHiResOff-\(UUID())"))
         let controller = HiResController(settings: HiResSettings(defaults: defaults))

@@ -20,22 +20,26 @@ enum QualityPathBuilder {
                           outputChannelCount: deviceID.readOutputChannelCount())
         }
         let capture = (recorder.captureFormat ?? tap.captureFormat).map { QualityPath.Stream(sampleRate: $0.sampleRate, channelCount: $0.channelCount) }
+        // A tap made on another output (e.g. on AudioCap Hi-Res during the last take) is replaced when the next take starts.
+        let isTapOnCurrentOutput = tap.tapOutputUID.map { $0 == clock?.uid } ?? true
         var path = assemble(sourceName: tap.process.name, sourceBundleID: tap.process.bundleID, tap: tapStream, clock: clock,
-                            capture: capture, format: format, isRecording: isRecording, isSourceAvailable: tap.isSourceAvailable)
+                            capture: capture, format: format, isRecording: isRecording, isSourceAvailable: tap.isSourceAvailable,
+                            isTapOnCurrentOutput: isTapOnCurrentOutput)
         QualityPathContributors.apply(to: &path)
         return path
     }
 
     /// The path before contributors. While idle nothing is captured, so it predicts the next take; when the source
     /// isn't running, the tap format is the one it had when it quit, so predict the rate a relaunched source opens the
-    /// output at instead.
+    /// output at instead. The same goes for a tap made on another output than the current one (after a Hi-Res take,
+    /// or after Hi-Res was turned off): the next take starts on a new tap opened on the current output.
     static func assemble(sourceName: String, sourceBundleID: String?, tap: QualityPath.Stream?, clock: QualityPath.Device?,
                          capture: QualityPath.Stream?, format: RecordingSettings.OutputFormat,
-                         isRecording: Bool, isSourceAvailable: Bool) -> QualityPath {
+                         isRecording: Bool, isSourceAvailable: Bool, isTapOnCurrentOutput: Bool = true) -> QualityPath {
         var path = QualityPath(sourceName: sourceName)
         path.sourceBundleID = sourceBundleID
         path.tap = tap
-        if !isRecording, !isSourceAvailable, let rate = clock?.nominalSampleRate {
+        if !isRecording, !isSourceAvailable || !isTapOnCurrentOutput, let rate = clock?.nominalSampleRate {
             path.tap?.sampleRate = rate
         }
         path.clock = clock
