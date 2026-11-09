@@ -31,11 +31,6 @@ extension AudioObjectID {
         try read(kAudioStreamPropertyVirtualFormat, defaultValue: AudioStreamBasicDescription())
     }
 
-    /// `kAudioDevicePropertyStreamFormat` on the input scope of a device.
-    func readDeviceInputStreamFormat() throws -> AudioStreamBasicDescription {
-        try read(AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamFormat, mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain), defaultValue: AudioStreamBasicDescription())
-    }
-
     func readArray<T>(_ address: AudioObjectPropertyAddress) throws -> [T] {
         var address = address
         var size: UInt32 = 0

@@ -15,7 +15,10 @@ enum CaptureBufferCopier {
     }
 
     static func copy(_ list: UnsafePointer<AudioBufferList>, maxFrames: UInt32? = nil, format: CaptureFormat, writerFormat: AVAudioFormat) -> Result? {
-        let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+        let allBuffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+        let first = min(format.firstBufferIndex, allBuffers.count)
+        let last = format.bufferCount.map { min(first + $0, allBuffers.count) } ?? allBuffers.count
+        let buffers = Array(allBuffers[first..<last])
         let bytesPerSample = format.sampleType.bytesPerSample
         let outChannels = Int(writerFormat.channelCount)
 

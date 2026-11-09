@@ -33,6 +33,12 @@ struct CaptureFormat: Equatable, Sendable, CustomStringConvertible {
     /// The ASBD this format was validated from.
     var sourceDescription: AudioStreamBasicDescription
 
+    /// Index of the first `AudioBuffer` that belongs to the tap. The aggregate device lists the input streams of
+    /// its sub-device (for example a microphone or a loopback driver's input) before the tap's streams.
+    var firstBufferIndex = 0
+    /// Number of buffers that belong to the tap, or `nil` for all buffers from `firstBufferIndex` on.
+    var bufferCount: Int?
+
     var description: String {
         "\(Self.rateString(sampleRate)) · \(channelCount) ch · \(sampleType.rawValue) · \(isInterleaved ? "interleaved" : "non-interleaved")"
     }
@@ -132,6 +138,7 @@ struct CaptureFormat: Equatable, Sendable, CustomStringConvertible {
     static func == (lhs: CaptureFormat, rhs: CaptureFormat) -> Bool {
         lhs.sampleRate == rhs.sampleRate && lhs.channelCount == rhs.channelCount && lhs.sampleType == rhs.sampleType
             && lhs.isInterleaved == rhs.isInterleaved && lhs.isBigEndian == rhs.isBigEndian
+            && lhs.firstBufferIndex == rhs.firstBufferIndex && lhs.bufferCount == rhs.bufferCount
     }
 }
 

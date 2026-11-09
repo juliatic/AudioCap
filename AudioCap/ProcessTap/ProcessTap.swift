@@ -54,6 +54,8 @@ final class ProcessTap {
     @ObservationIgnored private(set) var aggregateSampleRate: Double?
     @ObservationIgnored private(set) var aggregateOutputDevice: OutputDeviceInfo?
     @ObservationIgnored private(set) var lastFormatValidationError: String?
+    /// One line per input stream of the aggregate device, in buffer-list order.
+    @ObservationIgnored private(set) var aggregateInputStreams: [String] = []
 
     // MARK: CoreAudio objects
 
@@ -188,31 +190,41 @@ final class ProcessTap {
 
     /// Reads the format of the aggregate's input stream (the tap), validates and normalizes it.
     ///
-    /// Tries the input streams' virtual format first, then the device's input stream format, then the tap format.
+    /// Only the tap's streams count: the aggregate also lists its sub-device's input streams first, which is
+    /// what broke the old `AVAudioPCMBuffer(bufferListNoCopy:)` path on devices that have inputs.
+    /// Tries the tap streams' virtual format first, then the tap format.
     /// A missing sample rate is filled from the aggregate's nominal rate.
     private func readCaptureFormat() throws -> CaptureFormat {
         aggregateSampleRate = try? aggregateDeviceID.readNominalSampleRate()
         tapStreamDescription = try? processTapID.readAudioTapStreamBasicDescription()
 
-        var candidates: [(String, AudioStreamBasicDescription, Int)] = []
-        if let streams = try? aggregateDeviceID.readStreams(scope: kAudioObjectPropertyScopeInput), !streams.isEmpty {
-            let formats = streams.compactMap { try? $0.readStreamVirtualFormat() }
-            if let first = formats.first {
-                let channels = formats.reduce(0) { $0 + Int($1.mChannelsPerFrame) }
-                candidates.append(("aggregate input stream virtual format (\(streams.count) stream(s))", first, channels))
-            }
+        let allStreams = (try? aggregateDeviceID.readStreams(scope: kAudioObjectPropertyScopeInput)) ?? []
+        // The sub-device's own input streams (microphone, loopback input) come first in the buffer list.
+        let subDeviceInputs = aggregateOutputDevice.flatMap { try? $0.id.readStreams(scope: kAudioObjectPropertyScopeInput).count } ?? 0
+        let tapOffset = allStreams.count > subDeviceInputs ? subDeviceInputs : 0
+        aggregateInputStreams = allStreams.enumerated().map { index, stream in
+            let asbd = (try? stream.readStreamVirtualFormat())?.diagnosticDescription ?? "?"
+            let terminal: UInt32 = (try? stream.read(kAudioStreamPropertyTerminalType, defaultValue: UInt32(0))) ?? 0
+            let role = index < tapOffset ? "sub-device input" : "tap"
+            return "#\(index) \(role) terminal=\(AudioStatus.fourCharCode(OSStatus(bitPattern: terminal)) ?? "\(terminal)") \(asbd)"
         }
-        if let asbd = try? aggregateDeviceID.readDeviceInputStreamFormat() {
-            candidates.append(("aggregate device input stream format", asbd, Int(asbd.mChannelsPerFrame)))
+
+        var candidates: [(String, AudioStreamBasicDescription, [AudioStreamBasicDescription])] = []
+        let tapFormats = allStreams.dropFirst(tapOffset).compactMap { try? $0.readStreamVirtualFormat() }
+        if let first = tapFormats.first {
+            candidates.append(("aggregate input stream virtual format (tap streams \(tapOffset)..<\(allStreams.count))", first, tapFormats))
         }
         if let tapStreamDescription {
-            candidates.append(("tap format", tapStreamDescription, Int(tapStreamDescription.mChannelsPerFrame)))
+            candidates.append(("tap format", tapStreamDescription, [tapStreamDescription]))
         }
 
         var firstError: Error?
-        for (source, asbd, totalChannels) in candidates {
+        for (source, asbd, streamFormats) in candidates {
             do {
                 var format = try CaptureFormat(validating: asbd, fallbackSampleRate: aggregateSampleRate)
+                format.firstBufferIndex = tapOffset
+                format.bufferCount = streamFormats.count
+                let totalChannels = streamFormats.reduce(0) { $0 + Int($1.mChannelsPerFrame) }
                 if totalChannels > format.channelCount {
                     // Several mono/stereo input streams: one buffer per stream, channels in stream order.
                     format.channelCount = totalChannels

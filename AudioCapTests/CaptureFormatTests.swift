@@ -102,6 +102,26 @@ final class CaptureBufferCopierTests: XCTestCase {
         }
     }
 
+    func testSkipsSubDeviceInputBuffers() throws {
+        // Aggregate with a sub-device that has an input (mic/loopback) before the tap stream.
+        var micInput: [Float] = [0.9, 0.9, 0.9, 0.9]
+        var tapStream: [Float] = [0.1, -0.1, 0.2, -0.2]
+        var format = try CaptureFormat(validating: AudioStreamBasicDescription(mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kAudioFormatFlagsNativeFloatPacked, mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0))
+        format.firstBufferIndex = 1
+        format.bufferCount = 1
+        try micInput.withUnsafeMutableBytes { mic in
+            try tapStream.withUnsafeMutableBytes { tap in
+                let abl = list(buffers: [(2, mic.baseAddress!, mic.count), (2, tap.baseAddress!, tap.count)])
+                defer { free(abl.unsafeMutablePointer) }
+                let result = try XCTUnwrap(CaptureBufferCopier.copy(abl.unsafePointer, format: format, writerFormat: format.writerFormat))
+                XCTAssertFalse(result.layoutMismatch)
+                let out = result.buffer.floatChannelData!
+                XCTAssertEqual([out[0][0], out[0][1]], [0.1, 0.2])
+                XCTAssertEqual([out[1][0], out[1][1]], [-0.1, -0.2])
+            }
+        }
+    }
+
     func testMissingChannelIsZeroFilledAndReported() throws {
         var mono: [Float] = [0.5, 0.5]
         let format = try CaptureFormat(validating: AudioStreamBasicDescription(mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kAudioFormatFlagsNativeFloatPacked, mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0))
