@@ -326,6 +326,33 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         XCTAssertTrue(amended.first?.1.contains("This take and the next one may be one passage split by a CoreAudio dropout; 1.500 s between them") == true)
     }
 
+    /// The split gap is real time: frames CoreAudio never delivered between the takes (a timeline jump while the
+    /// first take's trailing zeros are still open, and an idle refresh while armed) count along with the zeros.
+    func testSplitGapCountsFramesNotDeliveredBetweenTheTakes() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        var next = 0
+        var sampleTime = 0.0
+        let cut = 48_027
+        feed(pipeline, cycles: cut / 9, sizes: [9], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        feed(pipeline, cycles: 25, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        sampleTime += 960 // a timeline jump 0.25 s into the zeros, before silence splitting closes the first take
+        feed(pipeline, cycles: 75, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        pipeline.noteReconnect(chargesTake: false)
+        sampleTime += 1_440 // an idle refresh 1 s into the zeros leaves 30 ms uncaptured
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        pipeline.finish()
+
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        let second = try XCTUnwrap(takes.last?.warning)
+        // 72,000 zero frames + 960 + 1,440 not delivered = 74,400 frames
+        XCTAssertTrue(second.contains("may be one passage split by a CoreAudio dropout; 1.550 s between them"), second)
+        XCTAssertTrue(collector.amended.first?.1.contains("1.550 s between them") == true)
+        XCTAssertTrue(takes.first?.warning?.contains("timeline jumped 1 time(s) (960 frames") == true, takes.first?.warning ?? "")
+    }
+
     /// The same shape with a real fade-out, and the next sound starting from a zero crossing: nothing is abrupt.
     func testFadeOutThenSoundFromZeroIsNotAbrupt() throws {
         let collector = Collector()
