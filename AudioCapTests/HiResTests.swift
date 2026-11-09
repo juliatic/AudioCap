@@ -119,6 +119,18 @@ final class HiResRouterTests: XCTestCase {
         XCTAssertNil(store.load())
     }
 
+    func testAfterStopTheNextRouteIsHiResAgain() throws {
+        XCTAssertEqual(router.nextRoute(rate: 96_000), .routed(monitor: headphones, rate: 96_000))
+        try router.route(rate: 96_000)
+        XCTAssertNil(router.nextRoute(rate: 96_000), "no prediction while a take is routed")
+        router.restore()
+        XCTAssertEqual(system.defaultUID, "bt")
+        XCTAssertEqual(router.nextRoute(rate: 96_000), .routed(monitor: headphones, rate: 96_000),
+                       "after Stop the next take is Hi-Res again, not the restored device's rate")
+        system.remove(HiResDevice.uid)
+        XCTAssertNil(router.nextRoute(rate: 96_000))
+    }
+
     func testRouteTwiceThrows() throws {
         try router.route(rate: 96_000)
         XCTAssertThrowsError(try router.route(rate: 96_000))

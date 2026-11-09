@@ -5,25 +5,45 @@ enum QualityPathBuilder {
     /// Reads the current path of `tap` and lets registered contributors add their part.
     @MainActor
     static func build(tap: ProcessTap, recorder: ProcessTapRecorder, format: RecordingSettings.OutputFormat) -> QualityPath {
-        var path = QualityPath(sourceName: tap.process.name)
-        if let asbd = tap.tapStreamDescription, asbd.mSampleRate > 0 {
-            path.tap = .init(sampleRate: asbd.mSampleRate, channelCount: Int(asbd.mChannelsPerFrame))
+        let isRecording = recorder.status != .idle
+        let tapStream = tap.tapStreamDescription.flatMap { asbd in
+            asbd.mSampleRate > 0 ? QualityPath.Stream(sampleRate: asbd.mSampleRate, channelCount: Int(asbd.mChannelsPerFrame)) : nil
         }
-        let deviceID = tap.aggregateOutputDevice?.id ?? (try? AudioDeviceID.readDefaultOutputDevice())
+        // While idle the aggregate can be stale (it is destroyed when the source quits), so describe the current output.
+        let defaultOutput = try? AudioDeviceID.readDefaultOutputDevice()
+        let deviceID = isRecording ? (tap.aggregateOutputDevice?.id ?? defaultOutput) : (defaultOutput ?? tap.aggregateOutputDevice?.id)
+        var clock: QualityPath.Device?
         if let deviceID, deviceID != .unknown {
-            path.clock = .init(name: deviceID.readName() ?? "?",
-                               uid: (try? deviceID.readDeviceUID()) ?? "",
-                               nominalSampleRate: try? deviceID.readNominalSampleRate(),
-                               outputChannelCount: deviceID.readOutputChannelCount())
+            clock = .init(name: deviceID.readName() ?? "?",
+                          uid: (try? deviceID.readDeviceUID()) ?? "",
+                          nominalSampleRate: try? deviceID.readNominalSampleRate(),
+                          outputChannelCount: deviceID.readOutputChannelCount())
         }
-        if recorder.status != .idle, let capture = recorder.captureFormat ?? tap.captureFormat {
-            path.capture = .init(sampleRate: capture.sampleRate, channelCount: capture.channelCount)
+        let capture = (recorder.captureFormat ?? tap.captureFormat).map { QualityPath.Stream(sampleRate: $0.sampleRate, channelCount: $0.channelCount) }
+        var path = assemble(sourceName: tap.process.name, sourceBundleID: tap.process.bundleID, tap: tapStream, clock: clock,
+                            capture: capture, format: format, isRecording: isRecording, isSourceAvailable: tap.isSourceAvailable)
+        QualityPathContributors.apply(to: &path)
+        return path
+    }
+
+    /// The path before contributors. While idle nothing is captured, so it predicts the next take; when the source
+    /// isn't running, the tap format is the one it had when it quit, so predict the rate a relaunched source opens the
+    /// output at instead.
+    static func assemble(sourceName: String, sourceBundleID: String?, tap: QualityPath.Stream?, clock: QualityPath.Device?,
+                         capture: QualityPath.Stream?, format: RecordingSettings.OutputFormat,
+                         isRecording: Bool, isSourceAvailable: Bool) -> QualityPath {
+        var path = QualityPath(sourceName: sourceName)
+        path.sourceBundleID = sourceBundleID
+        path.tap = tap
+        if !isRecording, !isSourceAvailable, let rate = clock?.nominalSampleRate {
+            path.tap?.sampleRate = rate
         }
+        path.clock = clock
+        path.capture = isRecording ? capture : nil
         if let rate = path.captureRate, let channels = path.captureChannels {
             path.file = .init(format: format, sampleRate: format == .aac ? min(rate, AudioExporter.maxAACSampleRate) : rate,
                               channelCount: channels)
         }
-        QualityPathContributors.apply(to: &path)
         return path
     }
 }
@@ -36,17 +56,28 @@ struct QualityPanel: View {
     private let settings = RecordingSettings.shared
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 2)) { _ in
-            let path = QualityPathBuilder.build(tap: tap, recorder: recorder, format: settings.outputFormat)
-            content(path: path, assessment: QualityAssessment.assess(path))
+        TimelineView(.periodic(from: .now, by: 2)) { context in
+            Snapshot(panel: self, date: context.date)
         }
         .onChange(of: recorder.status) { old, new in
             if old != .idle, new == .idle { matcher.restore() }
         }
     }
 
+    /// A view of its own so the observable state the path reads (recorder, Hi-Res setting, driver) refreshes it at
+    /// once, not only on the next timer tick.
+    private struct Snapshot: View {
+        let panel: QualityPanel
+        let date: Date
+
+        var body: some View {
+            let path = QualityPathBuilder.build(tap: panel.tap, recorder: panel.recorder, format: panel.settings.outputFormat)
+            panel.content(path: path, assessment: QualityAssessment.assess(path))
+        }
+    }
+
     @ViewBuilder
-    private func content(path: QualityPath, assessment: QualityAssessment) -> some View {
+    fileprivate func content(path: QualityPath, assessment: QualityAssessment) -> some View {
         Section {
             if assessment.isBitPerfect {
                 Label("Bit-perfect path", systemImage: "checkmark.seal.fill")

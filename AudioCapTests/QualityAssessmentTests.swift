@@ -1,4 +1,5 @@
 import XCTest
+import Observation
 @testable import AudioCap
 
 @MainActor
@@ -83,6 +84,60 @@ final class QualityAssessmentTests: XCTestCase {
         XCTAssertTrue(result.isBitPerfect)
         XCTAssertTrue(result.notes.contains(.hiResDevice))
         XCTAssertTrue(result.notes.contains(.monitor(deviceName: "Speakers", sampleRate: 48_000)))
+    }
+
+    func testAfterHiResStopTheIdlePanelDoesNotClaimResampling() {
+        // After Stop: the tap still reports the take's 96 kHz mix, the restored BlackHole runs at 48 kHz, no capture.
+        var idle = path(tapRate: 96_000, deviceRate: 48_000, captureRate: nil)
+        idle.clock?.name = "BlackHole 2ch"
+        XCTAssertEqual(QualityAssessment.assess(idle).issues, [.resampled(from: 96_000, to: 48_000)], "the reported bug")
+
+        let next = HiResController.predictedHiResPath(from: idle, rate: 96_000, monitorName: "BlackHole 2ch")
+        let result = QualityAssessment.assess(next)
+        XCTAssertTrue(result.isBitPerfect)
+        XCTAssertEqual(next.captureRate, 96_000)
+        XCTAssertEqual(next.file?.sampleRate, 96_000)
+        XCTAssertTrue(result.notes.contains(.predicted))
+        XCTAssertTrue(result.notes.contains(.hiResDevice))
+        XCTAssertTrue(result.notes.contains(.monitor(deviceName: "BlackHole 2ch", sampleRate: nil)))
+    }
+
+    func testHiResPredictionKeepsAACAtItsMaximumRate() {
+        let next = HiResController.predictedHiResPath(from: path(captureRate: nil, format: .aac), rate: 192_000, monitorName: "Speakers")
+        XCTAssertEqual(next.file?.sampleRate, AudioExporter.maxAACSampleRate)
+    }
+
+    func testIdleWithoutSourceDescribesTheCurrentOutputNotTheLastTap() {
+        // Hi-Res turned off after a take whose source has quit: the tap still reports the take's 96 kHz mix.
+        let blackHole = QualityPath.Device(name: "BlackHole 2ch", uid: "bh", nominalSampleRate: 48_000, outputChannelCount: 2)
+        let stale = QualityPath.Stream(sampleRate: 96_000, channelCount: 2)
+        let idle = QualityPathBuilder.assemble(sourceName: "afplay", sourceBundleID: nil, tap: stale, clock: blackHole, capture: nil,
+                                               format: .wav, isRecording: false, isSourceAvailable: false)
+        XCTAssertEqual(idle.tap?.sampleRate, 48_000)
+        XCTAssertEqual(idle.file?.sampleRate, 48_000)
+        let result = QualityAssessment.assess(idle)
+        XCTAssertTrue(result.isBitPerfect)
+        XCTAssertTrue(result.notes.contains(.predicted))
+        XCTAssertFalse(result.notes.contains(.hiResDevice))
+
+        let running = QualityPathBuilder.assemble(sourceName: "afplay", sourceBundleID: nil, tap: stale, clock: blackHole, capture: nil,
+                                                  format: .wav, isRecording: false, isSourceAvailable: true)
+        XCTAssertEqual(QualityAssessment.assess(running).issues, [.resampled(from: 96_000, to: 48_000)],
+                       "a running source keeps the rate it opened the output at")
+
+        let recording = QualityPathBuilder.assemble(sourceName: "afplay", sourceBundleID: nil, tap: stale, clock: blackHole, capture: stale,
+                                                    format: .wav, isRecording: true, isSourceAvailable: false)
+        XCTAssertEqual(recording.capture, stale)
+    }
+
+    func testTurningHiResOffRefreshesTheIdlePrediction() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "QualityHiResOff-\(UUID())"))
+        let controller = HiResController(settings: HiResSettings(defaults: defaults))
+        var changed = false
+        withObservationTracking { _ = controller.nextTake(sourceBundleID: nil) } onChange: { changed = true }
+        controller.settings.isEnabled = false
+        XCTAssertTrue(changed, "the panel observes the Hi-Res setting")
+        XCTAssertNil(controller.nextTake(sourceBundleID: nil))
     }
 
     func testEveryIssueAndNoteHasText() {
