@@ -34,12 +34,12 @@ extension AudioObjectID {
     func readArray<T>(_ address: AudioObjectPropertyAddress) throws -> [T] {
         var address = address
         var size: UInt32 = 0
-        try checkStatus(AudioObjectGetPropertyDataSize(self, &address, 0, nil, &size), "Reading the data size of \(address)")
+        try checkStatus(AudioObjectGetPropertyDataSize(self, &address, 0, nil, &size), "Reading the data size of \(address.description)")
         let count = Int(size) / MemoryLayout<T>.stride
         guard count > 0 else { return [] }
         let pointer = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<T>.alignment)
         defer { pointer.deallocate() }
-        try checkStatus(AudioObjectGetPropertyData(self, &address, 0, nil, &size, pointer), "Reading \(address)")
+        try checkStatus(AudioObjectGetPropertyData(self, &address, 0, nil, &size, pointer), "Reading \(address.description)")
         let typed = pointer.bindMemory(to: T.self, capacity: count)
         return Array(UnsafeBufferPointer(start: typed, count: Int(size) / MemoryLayout<T>.stride))
     }
@@ -79,7 +79,7 @@ final class AudioPropertyListener {
         self.objectID = objectID
         self.address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
         self.block = { _, _ in handler() }
-        try checkStatus(AudioObjectAddPropertyListenerBlock(objectID, &address, .main, block), "Adding a listener for \(address)")
+        try checkStatus(AudioObjectAddPropertyListenerBlock(objectID, &address, .main, block), "Adding a listener for \(address.description)")
         isActive = true
     }
 

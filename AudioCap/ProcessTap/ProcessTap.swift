@@ -155,8 +155,8 @@ final class ProcessTap {
     }
 
     private func startIO() throws -> CaptureFormat {
-        guard let ioQueue, let ioBlock else { throw "The capture queue is not configured." }
-        guard aggregateDeviceID.isValid else { throw errorMessage ?? "The aggregate device is not available." }
+        guard let ioQueue, let ioBlock else { throw String(localized: "The capture queue is not configured.") }
+        guard aggregateDeviceID.isValid else { throw errorMessage ?? String(localized: "The aggregate device is not available.") }
 
         errorMessage = nil
         logger.debug("Starting I/O")

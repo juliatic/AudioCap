@@ -110,7 +110,7 @@ final class ProcessTapRecorder {
             logger.warning("\(#function, privacy: .public) while already recording")
             return
         }
-        guard let tap else { throw "The process tap is not available." }
+        guard let tap else { throw String(localized: "The process tap is not available.") }
         lastError = nil
 
         let session = SessionSettings(
@@ -249,7 +249,7 @@ final class ProcessTapRecorder {
             logger.error("Could not create the capture file: \(message, privacy: .public)")
             io.session = nil
             DispatchQueue.main.async {
-                self.lastError = "Could not create the capture file: \(message)"
+                self.lastError = String(localized: "Could not create the capture file: \(message)")
                 self.stop()
             }
             return false
@@ -267,7 +267,7 @@ final class ProcessTapRecorder {
             take.capturedFrames = try writer.finish()
         } catch {
             take.capturedFrames = writer.framesWritten
-            take.status = .failed(message: "Capture failed: \(error.audioCapDescription)")
+            take.status = .failed(message: String(localized: "Capture failed: \(error.audioCapDescription)"))
             DispatchQueue.main.async { self.upsert(take, event: .updated(take)) }
             return
         }
@@ -302,7 +302,7 @@ final class ProcessTapRecorder {
                 take.status = .completed
                 logger.info("Exported \(take.outputURL.lastPathComponent, privacy: .public): \(result.frameCount) frames")
             } catch {
-                take.status = .failed(message: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent).")
+                take.status = .failed(message: String(localized: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent)."))
                 logger.error("Export failed: \(error.audioCapDescription, privacy: .public)")
             }
             DispatchQueue.main.async { self.upsert(take, event: .updated(take)) }

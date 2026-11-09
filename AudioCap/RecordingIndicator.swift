@@ -114,7 +114,7 @@ struct RecordingIndicatorPreview: View {
         HStack(spacing: 8) {
             RecordingIndicator(appIcon: icon, isRecording: isRecording)
 
-            Text(isRecording ? "Recording from Music" : "Ready to Record from Music")
+            Text(verbatim: isRecording ? "Recording from Music" : "Ready to Record from Music")
                 .font(.headline)
                 .contentTransition(.identity)
         }

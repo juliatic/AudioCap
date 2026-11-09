@@ -21,6 +21,8 @@ Every command below has an explicit timeout. On macOS, `timeout` comes from GNU 
 | Raw tests | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= test` | `** TEST SUCCEEDED **` |
 | One test | add `-only-testing:AudioCapTests/<Class>/<method>` | |
 | Fixture durations | see `audiocap-audio-quality` | header frames = decoded frames |
+| Catalog complete | after a build, compare the keys in `build/DerivedData/Build/Intermediates.noindex/AudioCap.build/*/AudioCap.build/Objects-normal/*/*.stringsdata` with `AudioCap/Localizable.xcstrings` | no key missing, none stale; `LocalizationTests` green |
+| Spanish UI | `open -n /Applications/AudioCap.app --args -AppleLanguages "(es)"` (`"(en)"` for English) | every label in Spanish, nothing truncated, numbers in Spanish format |
 
 Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact round trip, silence detector, auto-arm state machine). They need no tap and no permission, so they run anywhere.
 
@@ -30,10 +32,12 @@ Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact r
 - A VM without an audio output device makes the tap fail with `'!obj'` (`560947818`). A virtual output (for example BlackHole on a throwaway VM) gives the system a device; do not change audio devices on a machine other projects use.
 - Play a known file with `timeout 30 afplay <file> &` and pick `afplay` in the process list.
 - Each ad-hoc rebuild installed into `/Applications` (and the bundle-id change) can bring the audio-capture permission prompt back on first launch.
+- Observed on the build VM: right after `tccutil reset` and a fresh **Allow**, the running app recorded silence (peak 0.0); after relaunching it the same tone recorded normally. Relaunch before judging a capture made just after granting.
 - Show the permission prompt again: `tccutil reset AudioCapture <bundle id>` (`codes.rambo.samplecode.AudioCap` upstream, `io.github.juliatic.AudioCap` after the bundle-id change). Starting a recording may also trigger the microphone prompt.
 - App logs: `timeout 30 log show --last 5m --style compact --predicate 'process == "AudioCap"'`.
 - Check the result file with the duration check in `audiocap-audio-quality`; a 4,096-byte WAV with `duration=N/A` is an empty file (header only).
-- Screenshots: `screencapture -x -o -l <windowID> out.png` for a single window.
+- Screenshots: `screencapture -x -o -l <windowID> out.png` for a single window. README screenshots live in `docs/images/en/` and `docs/images/es/` with the same file names; take the Spanish ones with `-AppleLanguages "(es)"`.
+- Keyboard: with *Keyboard navigation* on, Tab must reach every control, Return triggers the default button (Allow, Open System Settings) and ⌘R starts and stops.
 
 ## Only on the owner's Mac
 - The audio-capture permission prompt and the flow after "Allow" on the owner's macOS version.

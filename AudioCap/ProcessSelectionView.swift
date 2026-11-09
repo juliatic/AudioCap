@@ -15,6 +15,7 @@ struct ProcessSelectionView: View {
         Section {
             Picker("Process", selection: $selectedProcess) {
                 Text("Select…")
+                    .font(AppStyle.body)
                     .tag(Optional<AudioProcess>.none)
 
                 ForEach(processController.processGroups) { group in
@@ -25,8 +26,10 @@ struct ProcessSelectionView: View {
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(width: 16, height: 16)
+                                    .accessibilityHidden(true)
 
                                 Text(process.name)
+                                    .font(AppStyle.body)
                             }
                                 .tag(Optional<AudioProcess>.some(process))
                         }
@@ -35,7 +38,7 @@ struct ProcessSelectionView: View {
                     }
                 }
             }
-            .disabled(recorder?.isRecording == true)
+            .disabled(recorder?.isRecording == true || recorder?.isConverting == true)
             .task { processController.activate() }
             .onChange(of: selectedProcess) { oldValue, newValue in
                 guard newValue != oldValue else { return }
@@ -48,14 +51,16 @@ struct ProcessSelectionView: View {
             }
         } header: {
             Text("Source")
-                .font(.headline)
+                .font(AppStyle.headline)
+                .accessibilityAddTraits(.isHeader)
         }
 
         if let tap {
             if let errorMessage = tap.errorMessage {
                 Text(errorMessage)
-                    .font(.headline)
-                    .foregroundStyle(.red)
+                    .font(AppStyle.headline)
+                    .foregroundStyle(AppStyle.errorText.color)
+                    .textSelection(.enabled)
             } else if let recorder {
                 RecordingView(recorder: recorder)
             }
