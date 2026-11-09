@@ -27,6 +27,8 @@ enum TakeWarning: Codable, Hashable, Sendable {
     case droppedFrames(frames: Int)
     case reconnected(count: Int)
     case timelineJumps(count: Int, skippedFrames: Int)
+    /// CoreAudio delivered digital zeros mid-signal while the source was playing.
+    case dropouts(count: Int, frames: Int, seconds: Double)
     /// Free text from an index written before warnings were codes, when it matches no known warning.
     case legacyText(text: String)
 
@@ -41,6 +43,10 @@ enum TakeWarning: Codable, Hashable, Sendable {
             return String(localized: "The capture was reconnected \(count) time(s) (output device change, source relaunch or wake); audio played during a reconnect is not in the take.", bundle: bundle)
         case .timelineJumps(let count, let skippedFrames):
             return String(localized: "The audio device's timeline jumped \(count) time(s) (\(skippedFrames) frames not delivered by CoreAudio).", bundle: bundle)
+        case .dropouts(let count, let frames, let seconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let secondsText = seconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "CoreAudio delivered digital zeros instead of \(sourceName)'s audio \(count) time(s) while it was playing (\(frames) frames, \(secondsText) s); that audio is missing from the take.", bundle: bundle)
         case .legacyText(let text):
             return text
         }

@@ -647,6 +647,16 @@
         }
       }
     },
+    "CoreAudio delivered digital zeros instead of %@'s audio %lld time(s) while it was playing (%lld frames, %@ s); that audio is missing from the take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cortes en el audio de %1$@: %2$lld (CoreAudio entregó ceros digitales mientras sonaba; %3$lld tramas, %4$@ s). Ese audio falta en la toma."
+          }
+        }
+      }
+    },
     "Could not create the capture file: %@" : {
       "localizations" : {
         "es" : {

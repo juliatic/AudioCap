@@ -58,4 +58,13 @@ final class DigitalSilenceGuardTests: XCTestCase {
         XCTAssertNil(guardian.warning)
         XCTAssertEqual(guardian.state, .armed)
     }
+
+    func testIdleTapRefreshOnlyWhileNoTakeIsOpenAndSilent() {
+        XCTAssertTrue(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 10, sourceIsPlaying: true, secondsSinceLastRefresh: nil))
+        XCTAssertFalse(IdleTapRefresh.shouldRefresh(isTakeOpen: true, silentSeconds: 60, sourceIsPlaying: true, secondsSinceLastRefresh: nil))
+        XCTAssertFalse(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 9.9, sourceIsPlaying: true, secondsSinceLastRefresh: nil))
+        XCTAssertFalse(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 60, sourceIsPlaying: false, secondsSinceLastRefresh: nil))
+        XCTAssertFalse(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 60, sourceIsPlaying: true, secondsSinceLastRefresh: 5))
+        XCTAssertTrue(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 60, sourceIsPlaying: true, secondsSinceLastRefresh: 10))
+    }
 }

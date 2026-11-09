@@ -109,6 +109,85 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         XCTAssertTrue(try XCTUnwrap(collector.closed.first).warning?.contains("256 frames") == true)
     }
 
+    /// Signal, then `zeroCycles` all-zero cycles of 480 frames, then signal again; a 440 Hz-ish square keeps edges loud.
+    private func feedCut(_ pipeline: CapturePipeline, zeroCycles: Int) {
+        var next = 0
+        var sampleTime = 0.0
+        let loud: (Int, Int) -> Float = { _, _ in 0.5 }
+        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
+        feed(pipeline, cycles: zeroCycles, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
+    }
+
+    func testZerosCuttingIntoSignalAreReportedAsMissingAudio() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        feedCut(pipeline, zeroCycles: 40) // 0.4 s
+        XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 1)
+        XCTAssertEqual(pipeline.dropoutFrames.load(ordering: .relaxed), 19_200)
+        pipeline.finish()
+        let warning = try XCTUnwrap(collector.closed.first?.warning)
+        XCTAssertTrue(warning.contains("0.400 s"), warning)
+        XCTAssertFalse(warning.contains("timeline jumped"))
+    }
+
+    func testLongSilenceOrSilentSourceIsNotADropout() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        feedCut(pipeline, zeroCycles: 150) // 1.5 s: a track gap, not a dropout
+        XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 0)
+        pipeline.finish()
+        XCTAssertNil(collector.closed.first?.warning)
+
+        let quiet = makePipeline(collector)
+        quiet.sourceIsOutputting.store(false, ordering: .relaxed)
+        feedCut(quiet, zeroCycles: 40)
+        XCTAssertEqual(quiet.dropouts.load(ordering: .relaxed), 0)
+        quiet.finish()
+    }
+
+    func testFadeToSilenceIsNotADropout() {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in 0.5 * max(0, 1 - Float(i) / 9_600) }
+        feed(pipeline, cycles: 40, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0.5 }
+        XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 0)
+        pipeline.finish()
+    }
+
+    func testTimelineJumpIsChargedOnlyToItsOwnTake() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        var next = 0
+        var sampleTime = 0.0
+        let tone: (Int, Int) -> Float = { _, _ in 0.5 }
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        sampleTime += 300
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        feed(pipeline, cycles: 200, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        pipeline.finish()
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        XCTAssertTrue(takes.first?.warning?.contains("300 frames") == true)
+        XCTAssertNil(takes.last?.warning)
+    }
+
+    func testTimelineLogKeepsOrderAndPosition() {
+        let log = CaptureTimelineLog()
+        for i in 0..<10 { log.push(.init(kind: i.isMultiple(of: 2) ? .jump : .dropout, position: i * 100, frames: i)) }
+        var seen: [Int] = []
+        log.consume(before: 450) { seen.append($0.frames) }
+        XCTAssertEqual(seen, [0, 1, 2, 3, 4])
+        log.consume(before: .max) { seen.append($0.frames) }
+        XCTAssertEqual(seen, Array(0..<10))
+        for i in 0..<(CaptureTimelineLog.capacity + 3) { log.push(.init(kind: .jump, position: i, frames: 0)) }
+        XCTAssertEqual(log.lostEntries.load(ordering: .relaxed), 3)
+    }
+
     func testReconnectIsNotReportedAsATimelineJump() throws {
         let collector = Collector()
         let pipeline = makePipeline(collector)

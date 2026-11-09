@@ -43,6 +43,8 @@ final class TakeWarningTests: XCTestCase {
         XCTAssertEqual(TakeWarning.timelineJumps(count: 3, skippedFrames: 512).text(source: .app(name: "afplay")),
                        "The audio device's timeline jumped 3 time(s) (512 frames not delivered by CoreAudio).")
         XCTAssertTrue(TakeWarning.allZero.text(source: .allSystemAudio).contains("If All system audio was playing"))
+        XCTAssertTrue(TakeWarning.dropouts(count: 1, frames: 480, seconds: 0.01).text(source: .app(name: "afplay"))
+            .hasPrefix("CoreAudio delivered digital zeros instead of afplay's audio 1 time(s)"))
     }
 
     func testSpanishRendering() throws {
@@ -56,6 +58,8 @@ final class TakeWarningTests: XCTestCase {
         XCTAssertEqual(TakeWarning.reconnected(count: 2).text(source: .app(name: "afplay"), bundle: es),
                        "Reconexiones de la captura: 2 (cambio de dispositivo de salida, reinicio del origen o reactivación); el audio que sonó durante una reconexión no está en la toma.")
         XCTAssertTrue(TakeWarning.allZero.text(source: .allSystemAudio, bundle: es).contains("Si Todo el audio del sistema estaba sonando"))
+        XCTAssertEqual(TakeWarning.dropouts(count: 2, frames: 480, seconds: 0.01).text(source: .app(name: "afplay"), bundle: es),
+                       "Cortes en el audio de afplay: 2 (CoreAudio entregó ceros digitales mientras sonaba; 480 tramas, \(0.01.formatted(.number.precision(.fractionLength(3)))) s). Ese audio falta en la toma.")
     }
 
     func testLegacyLibraryEntryMigratesAndIsRewrittenAsCodes() throws {

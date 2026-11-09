@@ -60,7 +60,8 @@ final class CapturePipeline: @unchecked Sendable {
     let layoutMismatches = Atomic<Int>(0)
     /// Frames in the current take's file.
     let currentTakeFrames = Atomic<Int>(0)
-    /// Jumps in the device's sample timeline between consecutive I/O cycles, and the frames they skipped.
+    /// Jumps in the device's sample timeline between consecutive I/O cycles, and the frames they skipped, since the
+    /// pipeline started (diagnostics). Each take's own share comes from `timeline`.
     let discontinuities = Atomic<Int>(0)
     let skippedFrames = Atomic<Int>(0)
     /// `AutoRecordMachine.Phase` of the writer queue's machine, encoded by `Self.code(for:)`.
@@ -69,6 +70,19 @@ final class CapturePipeline: @unchecked Sendable {
     private let splitEnabled = Atomic<Bool>(true)
     /// Reconnects (device rebuilds, tap recreation) during the current take.
     let reconnects = Atomic<Int>(0)
+    /// Dropouts: runs of all-zero I/O cycles that cut into signal and end with an abrupt return of signal, at most
+    /// `maxDropoutSeconds` long, while the source reports running output. Real audio does not jump from a loud sample
+    /// to exact zeros and back; the tap does when it delivers zeros mid-signal (see docs), and no sample time jumps.
+    let dropouts = Atomic<Int>(0)
+    let dropoutFrames = Atomic<Int>(0)
+    let timeline = CaptureTimelineLog()
+    /// `true` while a take file is open (writer queue writes, any thread reads).
+    let isTakeOpen = Atomic<Bool>(false)
+    /// Whether the source reports running output; kept current by the recorder (any thread).
+    let sourceIsOutputting = Atomic<Bool>(true)
+    /// A cycle edge at or above this magnitude (-40 dBFS) counts as an abrupt cut or return.
+    static let dropoutEdge: Float = 0.01
+    static let maxDropoutSeconds = 1.0
     private let signalSeen = Atomic<Bool>(false)
     /// `true` once any non-zero sample has arrived in this pipeline.
     var hasSeenSignal: Bool { signalSeen.load(ordering: .relaxed) }
@@ -80,6 +94,12 @@ final class CapturePipeline: @unchecked Sendable {
     // I/O thread only.
     private var detector: SilenceDetector?
     private var nextSampleTime: Float64 = -1
+    /// Largest magnitude of the last frame of the previous cycle; 0 after an all-zero cycle.
+    private var lastEdge: Float = 0
+    /// Frames of the all-zero run that started with an abrupt cut, not yet counted as a dropout.
+    private var pendingDropoutFrames = 0
+    private var pendingDropoutPosition = 0
+    private let maxDropoutFrames: Int
 
     // Writer queue only.
     private var timer: DispatchSourceTimer?
@@ -87,6 +107,10 @@ final class CapturePipeline: @unchecked Sendable {
     private var take: RecordingTake?
     private var takePeak: Float = 0
     private var takeOverflow = 0
+    private var takeJumps = 0
+    private var takeSkippedFrames = 0
+    private var takeDropouts = 0
+    private var takeDropoutFrames = 0
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
     private var openFailed = false
@@ -122,6 +146,7 @@ final class CapturePipeline: @unchecked Sendable {
         self.options = options
         self.handler = handler
         self.channelCount = Int(writerFormat.channelCount)
+        self.maxDropoutFrames = Int(format.sampleRate * Self.maxDropoutSeconds)
         self.detector = options.silenceDetector
         self.ring = CaptureRingBuffer(channelCount: channelCount, minimumCapacity: Int(format.sampleRate * options.bufferedSeconds))
         self.scratch = AVAudioPCMBuffer(pcmFormat: writerFormat, frameCapacity: 16_384)!
@@ -156,8 +181,10 @@ final class CapturePipeline: @unchecked Sendable {
         if let time, time.pointee.mFlags.contains(.sampleTimeValid) {
             let sampleTime = time.pointee.mSampleTime
             if nextSampleTime >= 0, abs(sampleTime - nextSampleTime) >= 1 {
+                let skipped = sampleTime > nextSampleTime ? Int(sampleTime - nextSampleTime) : 0
                 discontinuities.add(1, ordering: .relaxed)
-                if sampleTime > nextSampleTime { skippedFrames.add(Int(sampleTime - nextSampleTime), ordering: .relaxed) }
+                skippedFrames.add(skipped, ordering: .relaxed)
+                timeline.push(.init(kind: .jump, position: ring.producedFrames, frames: skipped))
             }
             nextSampleTime = sampleTime + Float64(layout.frames)
         }
@@ -165,11 +192,18 @@ final class CapturePipeline: @unchecked Sendable {
 
         var sumSquares: Float = 0
         var peak: Float = 0
+        var firstEdge: Float = 0
+        var endEdge: Float = 0
         let channelCount = self.channelCount
         let format = self.format
+        let totalFrames = layout.frames
         let staged = ring.stage(frameCount: layout.frames) { offset, count, destination in
             CaptureBufferCopier.convert(list, format: format, sourceOffset: offset, frameCount: count,
                                         channelCount: channelCount, destination: destination)
+            for c in 0..<channelCount where count > 0 {
+                if offset == 0 { firstEdge = max(firstEdge, abs(destination(c)[0])) }
+                if offset + count == totalFrames { endEdge = max(endEdge, abs(destination(c)[count - 1])) }
+            }
             for c in 0..<channelCount {
                 var channelPeak: Float = 0
                 var channelSquares: Float = 0
@@ -185,9 +219,23 @@ final class CapturePipeline: @unchecked Sendable {
         peakBits.store(level.peakDb.bitPattern, ordering: .relaxed)
         if peak == 0 {
             digitalSilenceRun.add(layout.frames, ordering: .relaxed)
+            if pendingDropoutFrames > 0 {
+                pendingDropoutFrames += layout.frames
+            } else if lastEdge >= Self.dropoutEdge, sourceIsOutputting.load(ordering: .relaxed) {
+                pendingDropoutFrames = layout.frames
+                pendingDropoutPosition = ring.producedFrames
+            }
+            lastEdge = 0
         } else {
             digitalSilenceRun.store(0, ordering: .relaxed)
             signalSeen.store(true, ordering: .relaxed)
+            if pendingDropoutFrames > 0, pendingDropoutFrames <= maxDropoutFrames, firstEdge >= Self.dropoutEdge {
+                dropouts.add(1, ordering: .relaxed)
+                dropoutFrames.add(pendingDropoutFrames, ordering: .relaxed)
+                timeline.push(.init(kind: .dropout, position: pendingDropoutPosition, frames: pendingDropoutFrames))
+            }
+            pendingDropoutFrames = 0
+            lastEdge = endEdge
         }
 
         if detector != nil, splitEnabled.load(ordering: .relaxed) {
@@ -200,9 +248,12 @@ final class CapturePipeline: @unchecked Sendable {
 
     /// Marks a deliberate restart of the device: the next cycle's sample time starts a new timeline and is not
     /// counted as a discontinuity. Call on the I/O queue while the producer is gated.
-    func noteReconnect() {
+    /// `chargesTake: false` for a refresh done while no take is open: the next take did not lose audio to it.
+    func noteReconnect(chargesTake: Bool = true) {
         nextSampleTime = -1
-        reconnects.add(1, ordering: .relaxed)
+        lastEdge = 0
+        pendingDropoutFrames = 0
+        if chargesTake { reconnects.add(1, ordering: .relaxed) }
     }
 
     // MARK: - Writer queue
@@ -250,10 +301,28 @@ final class CapturePipeline: @unchecked Sendable {
                 var sink = Sink(pipeline: self)
                 machine.process(scratch, level: AudioLevel(measuring: scratch), sink: &sink)
                 publishPhase()
+                chargeTimeline()
                 continue
             }
             if writer == nil, !openTake() { continue }
             writeToTake(scratch)
+            chargeTimeline()
+        }
+    }
+
+    /// Charges the timeline entries of the frames read so far to the open take, or drops them while none is open.
+    private func chargeTimeline() {
+        let isTakeOpen = writer != nil
+        timeline.consume(before: ring.consumedFrames) { entry in
+            guard isTakeOpen else { return }
+            switch entry.kind {
+            case .jump:
+                takeJumps += 1
+                takeSkippedFrames += entry.frames
+            case .dropout:
+                takeDropouts += 1
+                takeDropoutFrames += entry.frames
+            }
         }
     }
 
@@ -318,15 +387,19 @@ final class CapturePipeline: @unchecked Sendable {
                                  outputURL: outputURL, outputFormat: options.outputFormat, captureFormat: format)
         self.take = take
         takePeak = 0
+        isTakeOpen.store(true, ordering: .relaxed)
+        (takeJumps, takeSkippedFrames, takeDropouts, takeDropoutFrames) = (0, 0, 0, 0)
         handler(.opened(take))
         return true
     }
 
     private func closeTake() {
         takeOverflow += ring.overflowFrames.exchange(0, ordering: .relaxed)
+        chargeTimeline()
         guard let writer, var take else { return }
         self.writer = nil
         self.take = nil
+        isTakeOpen.store(false, ordering: .relaxed)
         currentTakeFrames.store(0, ordering: .relaxed)
         defer { takeOverflow = 0 }
 
@@ -348,11 +421,53 @@ final class CapturePipeline: @unchecked Sendable {
         if takeOverflow > 0 { warnings.append(.droppedFrames(frames: takeOverflow)) }
         let reconnected = reconnects.exchange(0, ordering: .relaxed)
         if reconnected > 0 { warnings.append(.reconnected(count: reconnected)) }
-        let jumps = discontinuities.exchange(0, ordering: .relaxed)
-        let skipped = skippedFrames.exchange(0, ordering: .relaxed)
-        if jumps > 0 { warnings.append(.timelineJumps(count: jumps, skippedFrames: skipped)) }
+        if takeJumps > 0 { warnings.append(.timelineJumps(count: takeJumps, skippedFrames: takeSkippedFrames)) }
+        if takeDropouts > 0 {
+            warnings.append(.dropouts(count: takeDropouts, frames: takeDropoutFrames,
+                                      seconds: Double(takeDropoutFrames) / format.sampleRate))
+        }
         take.warnings = warnings
         take.status = .exporting(progress: 0)
         handler(.closed(take))
+    }
+}
+
+/// Timeline jumps and dropouts found on the I/O thread, tagged with the ring position where they happened, so the
+/// writer queue charges each one to the take that contains that position (or to none, while no take is open).
+/// Single producer (I/O thread), single consumer (writer queue); no allocation or locks after init.
+final class CaptureTimelineLog: @unchecked Sendable {
+    enum Kind: UInt8 { case jump, dropout }
+    struct Entry { var kind: Kind; var position: Int; var frames: Int }
+
+    static let capacity = 256
+    private let entries = UnsafeMutablePointer<Entry>.allocate(capacity: CaptureTimelineLog.capacity)
+    private let writeIndex = Atomic<Int>(0)
+    private let readIndex = Atomic<Int>(0)
+    /// Entries the producer could not store because the consumer fell behind.
+    let lostEntries = Atomic<Int>(0)
+
+    deinit { entries.deallocate() }
+
+    func push(_ entry: Entry) {
+        let w = writeIndex.load(ordering: .relaxed)
+        guard w - readIndex.load(ordering: .acquiring) < Self.capacity else {
+            lostEntries.add(1, ordering: .relaxed)
+            return
+        }
+        (entries + (w & (Self.capacity - 1))).initialize(to: entry)
+        writeIndex.store(w + 1, ordering: .releasing)
+    }
+
+    /// Calls `body` for every entry before ring position `position`, oldest first, and removes it.
+    func consume(before position: Int, _ body: (Entry) -> Void) {
+        var r = readIndex.load(ordering: .relaxed)
+        let w = writeIndex.load(ordering: .acquiring)
+        while r < w {
+            let entry = entries[r & (Self.capacity - 1)]
+            guard entry.position < position else { break }
+            body(entry)
+            r += 1
+        }
+        readIndex.store(r, ordering: .releasing)
     }
 }
