@@ -89,6 +89,11 @@ struct RecordingView: View {
                 .disabled(recorder.isRecording)
             }
 
+            if let warning = recorder.silenceWarning {
+                Label(warning, systemImage: "speaker.slash")
+                    .foregroundStyle(.orange)
+            }
+
             if let error = recorder.lastError {
                 Text(error)
                     .foregroundStyle(.red)

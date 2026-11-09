@@ -58,6 +58,8 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
     var status: Status
     /// Filled in once the exported file has been read back.
     var analysis: FileAnalysis?
+    /// The recorder's warning for a saved take (digital silence, dropped frames, timeline gaps).
+    var warning: String?
 
     init(take: RecordingTake) {
         id = take.id
@@ -71,6 +73,7 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
         capturedFrames = take.capturedFrames
         exportedFrames = take.exportedFrames
         status = Status(take.status)
+        warning = take.warning
     }
 
     var displayName: String { fileURL.deletingPathExtension().lastPathComponent }
@@ -103,5 +106,6 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
         exportedFrames = take.exportedFrames
         sampleRate = take.captureFormat.sampleRate
         channelCount = take.captureFormat.channelCount
+        warning = take.warning
     }
 }

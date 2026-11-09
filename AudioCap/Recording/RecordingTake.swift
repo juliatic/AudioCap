@@ -40,6 +40,8 @@ struct RecordingTake: Identifiable, Equatable, Sendable {
     var capturedFrames: AVAudioFramePosition = 0
     /// Frames in the exported file once completed (at the export's rate).
     var exportedFrames: AVAudioFramePosition?
+    /// A problem worth showing even though the take was saved (digital silence, dropped frames).
+    var warning: String?
 
     /// For example "96 kHz · 2 ch · Float32 · interleaved".
     var captureFormatDescription: String { captureFormat.description }

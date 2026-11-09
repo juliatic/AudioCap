@@ -30,6 +30,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         library.apply(.added(recorded))
         recorded.status = .failed(message: "Disk full")
         recorded.capturedFrames = 96_000
+        recorded.warning = "Every sample in this take is 0 (digital silence)."
         library.apply(.updated(recorded))
 
         let reloaded = RecordingLibrary(indexURL: indexURL)
@@ -43,6 +44,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         XCTAssertEqual(entry.capturedFrames, 96_000)
         XCTAssertEqual(entry.duration, 2, accuracy: 1e-9)
         XCTAssertEqual(entry.status, .failed(reason: "Disk full"))
+        XCTAssertEqual(entry.warning, recorded.warning)
     }
 
     func testTakesStillBusyWhenTheAppQuitReloadAsFailed() throws {

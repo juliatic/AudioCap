@@ -82,6 +82,11 @@ struct LibraryRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.displayName).fontWeight(.semibold)
                 Text(details).foregroundStyle(.secondary)
+                if let warning = entry.warning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
                 statusView
             }
             Spacer()
