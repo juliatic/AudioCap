@@ -229,6 +229,13 @@ final class ProcessTap {
                 var format = try CaptureFormat(validating: asbd, fallbackSampleRate: aggregateSampleRate)
                 format.firstBufferIndex = tapOffset
                 format.bufferCount = streamFormats.count
+                var source = source
+                let delivered = CaptureFormat.deliveredRate(streamRate: format.sampleRate, aggregateRate: aggregateSampleRate)
+                if delivered.overridden {
+                    logger.warning("\(source, privacy: .public) says \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(delivered.rate, privacy: .public) Hz; using the aggregate's rate")
+                    format.sampleRate = delivered.rate
+                    source += ", rate from the aggregate's nominal rate"
+                }
                 let totalChannels = streamFormats.reduce(0) { $0 + Int($1.mChannelsPerFrame) }
                 if totalChannels > format.channelCount {
                     // Several mono/stereo input streams: one buffer per stream, channels in stream order.
@@ -299,6 +306,16 @@ final class ProcessTap {
         try checkStatus(AudioHardwareCreateAggregateDevice(description as CFDictionary, &deviceID), "Creating the aggregate device")
         aggregateDeviceID = deviceID
         aggregateSampleRate = try? deviceID.readNominalSampleRate()
+        // With no sub-devices the aggregate runs at the tap's rate; run it at the clock device's rate instead.
+        // Every rebuild and tap recreation goes through here, so a reconnect re-applies it.
+        if let rate = output.nominalSampleRate, rate > 0, aggregateSampleRate != rate {
+            do {
+                try deviceID.setNominalSampleRate(rate, name: "The tap aggregate")
+                aggregateSampleRate = rate
+            } catch {
+                logger.warning("Could not run the aggregate at \(rate, privacy: .public) Hz: \(error.audioCapDescription, privacy: .public)")
+            }
+        }
 
         logger.debug("Created aggregate device #\(deviceID, privacy: .public) on \(output.description, privacy: .public)")
     }

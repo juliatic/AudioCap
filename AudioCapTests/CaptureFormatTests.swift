@@ -57,6 +57,17 @@ final class CaptureFormatTests: XCTestCase {
         XCTAssertEqual(try CaptureFormat(validating: asbd(bits: 32, float: false, nonInterleaved: true)).isInterleaved, false)
     }
 
+    func testDeliveredRateTrustsTheAggregateWhenRatesDisagree() {
+        // 48 kHz tap format on a 96 kHz aggregate: frames arrive at 96 kHz.
+        XCTAssertEqual(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: 96_000).rate, 96_000)
+        XCTAssertTrue(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: 96_000).overridden)
+        XCTAssertEqual(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: 44_100).rate, 44_100)
+        XCTAssertFalse(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: 48_000).overridden)
+        XCTAssertEqual(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: nil).rate, 48_000)
+        XCTAssertEqual(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: 0).rate, 48_000)
+        XCTAssertEqual(CaptureFormat.deliveredRate(streamRate: 48_000, aggregateRate: .nan).rate, 48_000)
+    }
+
     func testDiagnosticDescriptionDecodesFormatID() {
         XCTAssertTrue(asbd().diagnosticDescription.contains("id='lpcm'"))
     }
