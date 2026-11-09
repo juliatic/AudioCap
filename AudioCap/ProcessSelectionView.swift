@@ -37,6 +37,9 @@ struct ProcessSelectionView: View {
             }
             .disabled(recorder?.isRecording == true)
             .task { processController.activate() }
+            .onChange(of: OutputFolder.shared.url) {
+                if recorder?.status == .idle, recorder?.isConverting == false { createRecorder() }
+            }
             .onChange(of: selectedProcess) { oldValue, newValue in
                 guard newValue != oldValue else { return }
 
@@ -58,6 +61,7 @@ struct ProcessSelectionView: View {
                     .foregroundStyle(.red)
             } else if let recorder {
                 RecordingView(recorder: recorder)
+                QualityPanel(tap: tap, recorder: recorder)
             }
         }
     }
@@ -74,7 +78,9 @@ struct ProcessSelectionView: View {
     private func createRecorder() {
         guard let tap else { return }
 
-        self.recorder = ProcessTapRecorder(tap: tap)
+        let recorder = ProcessTapRecorder(tap: tap, outputDirectory: OutputFolder.shared.preparedURL())
+        RecordingLibrary.shared.observe(recorder)
+        self.recorder = recorder
     }
 
     private func teardownTap() {

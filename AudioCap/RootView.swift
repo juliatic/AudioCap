@@ -14,8 +14,10 @@ struct RootView: View {
             case .denied:
                 permissionDeniedView
             }
+            LibrarySection()
         }
         .formStyle(.grouped)
+        .task { _ = DeviceRateMatcher.shared }
     }
 
     @ViewBuilder
