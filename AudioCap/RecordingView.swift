@@ -91,6 +91,11 @@ struct RecordingView: View {
                 .disabled(recorder.isRecording)
             }
 
+            if let warning = recorder.silenceWarning {
+                Label(warning, systemImage: "speaker.slash")
+                    .foregroundStyle(.orange)
+            }
+
             if let error = recorder.lastError {
                 Text(error)
                     .foregroundStyle(.red)
@@ -168,6 +173,12 @@ private struct TakeRow: View {
                 Text("\(take.captureFormatDescription) → \(take.outputFormat.displayName) · \(String(format: "%.3f s", take.duration))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let warning = take.warning {
+                    Text(warning)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
                 if case .failed(let message) = take.status {
                     Text(message)
                         .font(.caption)

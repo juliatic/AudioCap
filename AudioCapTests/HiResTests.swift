@@ -241,6 +241,37 @@ final class MonitorRingBufferTests: XCTestCase {
         XCTAssertEqual(ring.availableFrames, 744)
     }
 
+    /// Interleaved tap buffers are deinterleaved into the ring, also across its wrap point.
+    func testWritesInterleavedBufferListAcrossWrap() throws {
+        let format = try CaptureFormat(validating: AudioStreamBasicDescription(
+            mSampleRate: 10_000, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
+            mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0))
+        let ring = MonitorRingBuffer(channelCount: 2, sampleRate: 10_000, latency: 0.1) // capacity 8,000 frames
+        let frames = 3_000
+        var interleaved = [Float](repeating: 0, count: frames * 2)
+        let abl = AudioBufferList.allocate(maximumBuffers: 2)
+        defer { free(abl.unsafeMutablePointer) }
+        let out = [UnsafeMutablePointer<Float>.allocate(capacity: frames), UnsafeMutablePointer<Float>.allocate(capacity: frames)]
+        defer { out.forEach { $0.deallocate() } }
+        for c in 0..<2 { abl[c] = AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(frames * 4), mData: out[c]) }
+        for block in 0..<3 {
+            for i in 0..<frames {
+                interleaved[2 * i] = Float(block * frames + i)
+                interleaved[2 * i + 1] = -Float(block * frames + i)
+            }
+            interleaved.withUnsafeMutableBytes { raw in
+                var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(frames * 8), mData: raw.baseAddress))
+                ring.write(&list, format: format)
+            }
+            ring.read(into: abl, frames: frames)
+        }
+        // Block 2 covers ring indices 6,000..<9,000, so it wraps at 8,000.
+        XCTAssertEqual(out[0][0], Float(2 * frames))
+        XCTAssertEqual(out[0][frames - 1], Float(3 * frames - 1))
+        XCTAssertEqual(out[1][frames - 1], -Float(3 * frames - 1))
+        XCTAssertEqual(ring.availableFrames, 0)
+    }
+
     func testSilenceBeforePriming() {
         let ring = MonitorRingBuffer(channelCount: 1, sampleRate: 10_000, latency: 0.1)
         let samples = [Float](repeating: 1, count: 100)

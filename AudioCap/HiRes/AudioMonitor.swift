@@ -15,8 +15,11 @@ final class MonitorRingBuffer: @unchecked Sendable {
     /// Only touched by the reader.
     private var primed = false
 
+    let sampleRate: Double
+
     init(channelCount: Int, sampleRate: Double, latency: TimeInterval = 0.1) {
         self.channelCount = max(channelCount, 1)
+        self.sampleRate = sampleRate
         self.targetLatency = max(Int(sampleRate * latency), 256)
         self.capacity = targetLatency * 8
         storage = .allocate(capacity: self.channelCount * capacity)
@@ -24,6 +27,10 @@ final class MonitorRingBuffer: @unchecked Sendable {
     }
 
     deinit { storage.deallocate() }
+
+    func matches(_ format: CaptureFormat) -> Bool {
+        channelCount == max(format.channelCount, 1) && sampleRate == format.sampleRate
+    }
 
     var availableFrames: Int { writeIndex.load(ordering: .acquiring) - readIndex.load(ordering: .acquiring) }
 
@@ -37,6 +44,24 @@ final class MonitorRingBuffer: @unchecked Sendable {
             let src = channels[min(c, channels.count - 1)]
             let dst = storage + c * capacity
             for i in 0..<frames { dst[(w + i) % capacity] = src[i] }
+        }
+        writeIndex.store(w + frames, ordering: .releasing)
+    }
+
+    /// Producer side, from the I/O block: converts the tap's buffers straight into the ring. Allocates nothing.
+    func write(_ list: UnsafePointer<AudioBufferList>, format: CaptureFormat) {
+        let frames = CaptureBufferCopier.layout(of: list, format: format).frames
+        guard frames > 0 else { return }
+        let w = writeIndex.load(ordering: .relaxed)
+        let r = readIndex.load(ordering: .acquiring)
+        guard capacity - (w - r) >= frames else { return }
+        var done = 0
+        while done < frames {
+            let start = (w + done) % capacity
+            let count = min(frames - done, capacity - start)
+            CaptureBufferCopier.convert(list, format: format, sourceOffset: done, frameCount: count,
+                                        channelCount: channelCount) { storage + $0 * capacity + start }
+            done += count
         }
         writeIndex.store(w + frames, ordering: .releasing)
     }
@@ -68,7 +93,8 @@ final class MonitorRingBuffer: @unchecked Sendable {
 final class AudioMonitor {
     private let logger = Logger(subsystem: kAppSubsystem, category: "AudioMonitor")
     private var engine: AVAudioEngine?
-    private let ring = Mutex<MonitorRingBuffer?>(nil)
+    /// Ring fed by the recorder's I/O block. Kept across engine restarts (device changes) while the format is the same.
+    private(set) var ringBuffer: MonitorRingBuffer?
     private(set) var format: CaptureFormat?
     private(set) var device: AudioOutputDevice?
 
@@ -80,7 +106,8 @@ final class AudioMonitor {
     /// (Re)starts the monitor for `format` on `device`.
     func start(format: CaptureFormat, device: AudioOutputDevice, deviceID: AudioDeviceID) throws {
         stop()
-        let buffer = MonitorRingBuffer(channelCount: format.channelCount, sampleRate: format.sampleRate)
+        let buffer = ringBuffer.flatMap { $0.matches(format) ? $0 : nil }
+            ?? MonitorRingBuffer(channelCount: format.channelCount, sampleRate: format.sampleRate)
         guard let sourceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: AVAudioChannelCount(buffer.channelCount), interleaved: false) else {
             throw "The monitor cannot use \(format.description)."
         }
@@ -98,13 +125,12 @@ final class AudioMonitor {
         self.engine = engine
         self.format = format
         self.device = device
-        ring.withLock { $0 = buffer }
+        ringBuffer = buffer
         applyVolume()
         logger.info("Monitoring \(format.description, privacy: .public) on \(device.name, privacy: .public)")
     }
 
     func stop() {
-        ring.withLock { $0 = nil }
         engine?.stop()
         engine = nil
         format = nil
@@ -116,13 +142,6 @@ final class AudioMonitor {
         guard let engine else { return nil }
         let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
         return rate > 0 ? rate : nil
-    }
-
-    /// Capture queue: copies a deinterleaved Float32 buffer into the ring.
-    func push(_ buffer: AVAudioPCMBuffer) {
-        guard let data = buffer.floatChannelData else { return }
-        let channels = (0..<Int(buffer.format.channelCount)).map { UnsafePointer(data[$0]) }
-        ring.withLock { $0?.write(channels: channels, frames: Int(buffer.frameLength)) }
     }
 
     private func applyVolume() {

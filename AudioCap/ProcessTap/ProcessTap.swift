@@ -21,6 +21,10 @@ final class ProcessTap {
     enum Event {
         /// I/O is about to stop for a rebuild (output device change, wake). Buffers until the next event are not valid.
         case willReconfigure
+        /// I/O is about to start with this format, read from the aggregate before `AudioDeviceStart`.
+        /// Prepare for it now so the first I/O cycles are not lost; the format read after start follows
+        /// in `start`'s return value or in `.reconfigured`/`.sourceRestored`.
+        case willStart(CaptureFormat)
         /// I/O restarted after a rebuild. The format may differ from the previous one.
         case reconfigured(CaptureFormat)
         /// The source app quit. The tap waits for it to come back.
@@ -163,6 +167,7 @@ final class ProcessTap {
 
         try checkStatus(AudioDeviceCreateIOProcIDWithBlock(&deviceProcID, aggregateDeviceID, ioQueue, ioBlock), "Creating the device I/O proc")
         do {
+            if let provisional = try? readCaptureFormat() { eventHandler?(.willStart(provisional)) }
             try checkStatus(AudioDeviceStart(aggregateDeviceID, deviceProcID), "Starting the aggregate device")
             let format = try readCaptureFormat()
             captureFormat = format
@@ -272,18 +277,12 @@ final class ProcessTap {
         let output = try OutputDeviceInfo.currentDefault()
         aggregateOutputDevice = output
 
-        let description: [String: Any] = [
+        var description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "Tap-\(process.id)",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
-            kAudioAggregateDeviceMainSubDeviceKey: output.uid,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
             kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceSubDeviceListKey: [
-                [
-                    kAudioSubDeviceUIDKey: output.uid
-                ]
-            ],
             kAudioAggregateDeviceTapListKey: [
                 [
                     kAudioSubTapDriftCompensationKey: true,
@@ -291,6 +290,10 @@ final class ProcessTap {
                 ]
             ]
         ]
+        // The output device is named as the clock but deliberately not added as a sub-device: a sub-device
+        // brings its input streams (a headset mic, a loopback driver's input) into the aggregate, which makes
+        // starting I/O trigger the microphone permission prompt and, until it is answered, deliver silence.
+        description[kAudioAggregateDeviceMainSubDeviceKey] = output.uid
 
         var deviceID = AudioObjectID.unknown
         try checkStatus(AudioHardwareCreateAggregateDevice(description as CFDictionary, &deviceID), "Creating the aggregate device")
@@ -390,6 +393,35 @@ final class ProcessTap {
             }
         } catch {
             logger.error("Rebuild failed: \(error.audioCapDescription, privacy: .public)")
+            errorMessage = error.audioCapDescription
+            if wasRunning { eventHandler?(.failed(error)) }
+        }
+    }
+
+    /// `true` when the source app reports that it is playing audio right now.
+    var isSourceOutputting: Bool {
+        isSourceAvailable && process.objectID.readProcessIsRunningOutput()
+    }
+
+    /// Destroys and recreates the tap and the aggregate device, restarting I/O if it was running.
+    /// Used when a running tap delivers only silence although the source is playing.
+    @MainActor
+    func recreateTap(reason: String) {
+        guard activated, isSourceAvailable else { return }
+        logger.info("Recreating the tap: \(reason, privacy: .public)")
+        pendingRebuild?.cancel()
+        let wasRunning = wantsRunning && deviceProcID != nil
+        if wasRunning { eventHandler?(.willReconfigure) }
+        stopIO()
+        destroyAggregateAndTap()
+        do {
+            try prepare(for: process.objectID)
+            if wasRunning {
+                let format = try startIO()
+                eventHandler?(.reconfigured(format))
+            }
+        } catch {
+            logger.error("Recreating the tap failed: \(error.audioCapDescription, privacy: .public)")
             errorMessage = error.audioCapDescription
             if wasRunning { eventHandler?(.failed(error)) }
         }
