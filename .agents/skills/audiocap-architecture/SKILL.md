@@ -27,10 +27,10 @@ Invalidation (source app quits, device disappears, default output changes) runs 
 | IO block | copy `AudioBufferList` into preallocated storage, update an atomic counter, signal. Nothing else: no allocation, locks, I/O, logging, main-actor hops. |
 | Writer queue (serial) | owns the `AVAudioFile`: create, write, close. Computes levels for the meter/auto-record from what it wrote. |
 | Converter (background) | reads the closed CAF, writes the export, drains to `endOfStream`. |
-| Main actor | UI state, start/stop requests, error display. Creates the `AutoRecordMachine` (and its rings) for each capture format. |
+| Main actor | UI state, start/stop requests, error display. Creates the `CapturePipeline` (and its `AutoRecordMachine`) for each capture format. |
 
 ## Auto-record
-`AutoRecordMachine` (pure, no CoreAudio) decides when takes open and close; `ProcessTapRecorder` feeds it each buffer with its level through a `TakeSink`. Phases: idle → armed (pre-roll ring only) → recording → closing (first 0.5 s of silence written, the rest held) → armed again. Format changes, source loss and manual auto-split end a take through `endTake`, so the machine stays in sync. Mode changes apply at once via `setMode`. The machine creates one buffer only when it hands the pre-roll or held silence to the writer.
+`AutoRecordMachine` (pure, no CoreAudio) decides when takes open and close; `CapturePipeline`'s writer queue feeds it 512-frame chunks from the capture ring, with their level, through a `TakeSink`; the I/O block never sees it. In Wait for sound the pipeline's silence splitter is off (`splitEnabled`). Phases: idle → armed (pre-roll ring only) → recording → closing (first 0.5 s of silence written, the rest held) → armed again. Format changes, source loss and manual auto-split end a take through `endTake`, so the machine stays in sync. Mode changes apply at once via `setMode`. The machine creates one buffer only when it hands the pre-roll or held silence to the writer.
 
 ## Format pipeline
 tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossless) → export:

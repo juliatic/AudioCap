@@ -49,7 +49,7 @@ When a planned item lands, move it to "shipped" here in the same PR.
 - **The IO block (the CoreAudio IO queue) is real-time.** It may only copy the incoming `AudioBufferList` into storage that was allocated before `AudioDeviceStart`, and signal the writer. No allocation (no `AVAudioPCMBuffer` creation, no Swift arrays, no string formatting), no locks, no file or network I/O, no `DispatchQueue.sync`, no logging, no main-actor hops.
 - **Stop order:** `AudioDeviceStop` → drain the hand-off buffer → `close()` the file on the writer queue → check frame count vs header → only then convert. Destroy the IOProc, aggregate device and tap afterwards.
 - UI state is `@MainActor`; the writer posts progress and errors back to the main actor, never the IO block.
-- Auto-record logic lives in `AutoRecordMachine` (pure; tests in `AutoRecordMachineTests`), not in `ProcessTapRecorder`. Its rings are allocated with the machine on the main actor before the format reaches the I/O path; `AudioRingBuffer.append` never allocates.
+- Auto-record logic lives in `AutoRecordMachine` (pure; tests in `AutoRecordMachineTests`), not in `ProcessTapRecorder`. It runs on `CapturePipeline`'s writer queue (not the I/O block), fed in 512-frame chunks drained from the capture ring, so sound detection, pre-roll and tail work at that resolution; its rings are allocated when the pipeline is created.
 
 ## Commands
 
