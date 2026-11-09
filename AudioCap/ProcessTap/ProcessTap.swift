@@ -229,6 +229,15 @@ final class ProcessTap {
                 var format = try CaptureFormat(validating: asbd, fallbackSampleRate: aggregateSampleRate)
                 format.firstBufferIndex = tapOffset
                 format.bufferCount = streamFormats.count
+                // The I/O cycle runs on the aggregate's clock, so buffers carry frames at its nominal rate even when
+                // the tap's own format still reports the process's rate (e.g. 48 kHz tap, 96 kHz Hi-Res aggregate).
+                var source = source
+                if let aggregateSampleRate, aggregateSampleRate.isFinite, aggregateSampleRate > 0,
+                   format.sampleRate != aggregateSampleRate {
+                    logger.warning("\(source, privacy: .public) says \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(aggregateSampleRate, privacy: .public) Hz; using the aggregate's rate")
+                    format.sampleRate = aggregateSampleRate
+                    source += ", rate from the aggregate's nominal rate"
+                }
                 let totalChannels = streamFormats.reduce(0) { $0 + Int($1.mChannelsPerFrame) }
                 if totalChannels > format.channelCount {
                     // Several mono/stereo input streams: one buffer per stream, channels in stream order.
