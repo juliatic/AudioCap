@@ -1,82 +1,114 @@
 import Foundation
 import AVFoundation
 
+/// Level of one buffer, measured across all channels.
+struct AudioLevel: Equatable, Sendable {
+    /// RMS level in dBFS (`-infinity`-safe: clamped at -240 dB).
+    var rmsDb: Double
+    /// Peak sample level in dBFS.
+    var peakDb: Double
+
+    static let silence = AudioLevel(rmsDb: -240, peakDb: -240)
+
+    /// Measures a Float32 buffer, interleaved or not.
+    ///
+    /// Interleaved buffers keep every channel in `floatChannelData[0]` with a stride of `channelCount`;
+    /// only deinterleaved buffers have one pointer per channel.
+    init(measuring buffer: AVAudioPCMBuffer) {
+        let frames = Int(buffer.frameLength)
+        let channels = Int(buffer.format.channelCount)
+        guard frames > 0, channels > 0, let data = buffer.floatChannelData else {
+            self = .silence
+            return
+        }
+        var sumSquares: Double = 0
+        var peak: Float = 0
+        let sampleCount = frames * channels
+        if buffer.format.isInterleaved {
+            let samples = data[0]
+            for i in 0..<sampleCount {
+                let s = samples[i]
+                sumSquares += Double(s) * Double(s)
+                peak = max(peak, abs(s))
+            }
+        } else {
+            for c in 0..<channels {
+                let samples = data[c]
+                for i in 0..<frames {
+                    let s = samples[i]
+                    sumSquares += Double(s) * Double(s)
+                    peak = max(peak, abs(s))
+                }
+            }
+        }
+        self.rmsDb = Self.dbfs(sqrt(sumSquares / Double(sampleCount)))
+        self.peakDb = Self.dbfs(Double(peak))
+    }
+
+    init(rmsDb: Double, peakDb: Double) {
+        self.rmsDb = rmsDb
+        self.peakDb = peakDb
+    }
+
+    static func dbfs(_ linear: Double) -> Double {
+        20.0 * log10(max(linear, 1e-12))
+    }
+}
+
 /// Performs RMS-based silence detection over incoming audio buffers.
-/// - Computes RMS amplitude and converts to dBFS.
-/// - Accumulates continuous silence duration and reports when it crosses the configured minimum.
+/// - Computes the RMS level across all channels and converts it to dBFS.
+/// - Accumulates continuous silence and reports a split once it crosses `minSilenceDuration`.
+/// - After a split, `isInSplitSilence` stays `true` until sound resumes, so callers can drop the rest of
+///   the silence instead of writing it into the next file.
 struct SilenceDetector {
-    /// dBFS threshold under which audio is considered silent (e.g. -40 dB).
+    /// dBFS threshold at or under which audio is considered silent (e.g. -60 dB).
     var thresholdDb: Double
     /// Minimum continuous silence duration in seconds required to trigger a split.
     var minSilenceDuration: Double
 
     /// Accumulated silence (seconds) while RMS stays under threshold.
     private(set) var accumulatedSilence: Double = 0
-    /// Set after a split is triggered during the current silence period, until sound resumes.
-    private var splitTriggeredForCurrentSilence = false
+    /// `true` after a split was triggered, until sound resumes.
+    private(set) var isInSplitSilence = false
 
-    /// Public initializer to avoid private memberwise init due to private properties.
+    struct Analysis: Equatable {
+        var isSilent: Bool
+        var rmsDb: Double
+        /// `true` exactly once per silence period, on the buffer that reached `minSilenceDuration`.
+        var didTriggerSplit: Bool
+        /// `true` when the buffer is silence following an already triggered split: don't write it.
+        var shouldDrop: Bool
+        var silentDuration: Double
+    }
+
     init(thresholdDb: Double, minSilenceDuration: Double) {
         self.thresholdDb = thresholdDb
         self.minSilenceDuration = minSilenceDuration
-        self.accumulatedSilence = 0
-        self.splitTriggeredForCurrentSilence = false
     }
 
-    /// Resets accumulated silence and the split flag, typically called when non-silent audio is observed.
     mutating func reset() {
         accumulatedSilence = 0
-        splitTriggeredForCurrentSilence = false
+        isInSplitSilence = false
     }
 
-    /// Processes an incoming buffer and returns silence analysis results.
-    mutating func process(buffer: AVAudioPCMBuffer) -> (isSilent: Bool, rmsDb: Double, didTriggerSplit: Bool, silentDuration: Double) {
-        let rms = Self.computeRMS(buffer)
-        let rmsDb = Self.dbfs(fromLinear: rms)
-        let duration = Double(buffer.frameLength) / buffer.format.sampleRate
+    mutating func process(buffer: AVAudioPCMBuffer) -> Analysis {
+        process(level: AudioLevel(measuring: buffer), duration: Double(buffer.frameLength) / buffer.format.sampleRate)
+    }
 
-        var didTriggerSplit = false
-
-        if rmsDb <= thresholdDb {
-            accumulatedSilence += duration
-            if accumulatedSilence >= minSilenceDuration, !splitTriggeredForCurrentSilence {
-                didTriggerSplit = true
-                splitTriggeredForCurrentSilence = true
-            }
-        } else {
-            // Non-silent audio resets silence accumulation and allows future splits
+    mutating func process(level: AudioLevel, duration: Double) -> Analysis {
+        let isSilent = level.rmsDb <= thresholdDb
+        guard isSilent else {
             reset()
+            return Analysis(isSilent: false, rmsDb: level.rmsDb, didTriggerSplit: false, shouldDrop: false, silentDuration: 0)
         }
-
-        return (rmsDb <= thresholdDb, rmsDb, didTriggerSplit, accumulatedSilence)
-    }
-
-    /// Computes RMS amplitude across all channels for the provided buffer.
-    private static func computeRMS(_ buffer: AVAudioPCMBuffer) -> Double {
-        guard let channelData = buffer.floatChannelData else { return 0.0 }
-        let frameCount = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
-
-        if frameCount == 0 || channelCount == 0 { return 0.0 }
-
-        var sumSquares: Double = 0
-        for ch in 0..<channelCount {
-            let samples = channelData[ch]
-            var channelSum: Double = 0
-            // Iterate samples and sum squares
-            for i in 0..<frameCount {
-                let s = Double(samples[i])
-                channelSum += s * s
-            }
-            sumSquares += channelSum
+        if isInSplitSilence {
+            accumulatedSilence += duration
+            return Analysis(isSilent: true, rmsDb: level.rmsDb, didTriggerSplit: false, shouldDrop: true, silentDuration: accumulatedSilence)
         }
-        let meanSquare = sumSquares / Double(frameCount * max(channelCount, 1))
-        return sqrt(meanSquare)
-    }
-
-    /// Converts linear amplitude to dBFS, clamping at a very small epsilon to avoid -inf.
-    private static func dbfs(fromLinear linear: Double) -> Double {
-        let epsilon = 1e-12
-        return 20.0 * log10(max(linear, epsilon))
+        accumulatedSilence += duration
+        // Small tolerance: buffer durations summed as Doubles fall just short of round values.
+        let trigger = accumulatedSilence >= minSilenceDuration - 1e-9
+        if trigger { isInSplitSilence = true }
+        return Analysis(isSilent: true, rmsDb: level.rmsDb, didTriggerSplit: trigger, shouldDrop: trigger, silentDuration: accumulatedSilence)
     }
 }
