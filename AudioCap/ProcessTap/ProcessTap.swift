@@ -57,6 +57,8 @@ final class ProcessTap {
     @ObservationIgnored private(set) var aggregateFormatSource: String?
     @ObservationIgnored private(set) var aggregateSampleRate: Double?
     @ObservationIgnored private(set) var aggregateOutputDevice: OutputDeviceInfo?
+    /// UID of the default output when the tap was created; rebuilding only the aggregate on another output keeps it.
+    @ObservationIgnored private(set) var tapOutputUID: String?
     @ObservationIgnored private(set) var lastFormatValidationError: String?
     /// One line per input stream of the aggregate device, in buffer-list order.
     @ObservationIgnored private(set) var aggregateInputStreams: [String] = []
@@ -330,6 +332,7 @@ final class ProcessTap {
         self.tapStreamDescription = try? tapID.readAudioTapStreamBasicDescription()
 
         try createAggregateDevice()
+        tapOutputUID = aggregateOutputDevice?.uid
     }
 
     /// Creates the private aggregate device with the current default output device as its clock and the tap as input.
@@ -500,7 +503,8 @@ final class ProcessTap {
         pendingRebuild?.cancel()
         let wasRunning = wantsRunning && deviceProcID != nil
         let old = (tap: processTapID, uuid: tapUUID, aggregate: aggregateDeviceID, proc: deviceProcID,
-                   output: aggregateOutputDevice, rate: aggregateSampleRate, tapFormat: tapStreamDescription)
+                   output: aggregateOutputDevice, rate: aggregateSampleRate, tapFormat: tapStreamDescription,
+                   tapOutputUID: tapOutputUID)
         do {
             try prepare(for: process.objectID)
         } catch {
@@ -508,6 +512,7 @@ final class ProcessTap {
             if processTapID != old.tap { destroyAggregateAndTap() }
             (processTapID, tapUUID, aggregateDeviceID, deviceProcID) = (old.tap, old.uuid, old.aggregate, old.proc)
             (aggregateOutputDevice, aggregateSampleRate, tapStreamDescription) = (old.output, old.rate, old.tapFormat)
+            tapOutputUID = old.tapOutputUID
             return
         }
         if wasRunning {
