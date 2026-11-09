@@ -2242,7 +2242,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Puede que la toma empiece hasta %@ s tarde: su primer sonido llegó durante una renovación del tap en reposo o justo después, y el audio reproducido durante la renovación no está en la toma."
+            "value" : "Puede que la toma empiece hasta %@ s tarde: su primer sonido llegó durante una renovación de la captura en reposo o justo después, y el audio reproducido durante la renovación no está en la toma."
           }
         }
       }
