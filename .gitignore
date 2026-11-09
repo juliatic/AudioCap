@@ -15,6 +15,7 @@ DerivedData
 .idea/
 Provisioning
 Build/
-# Per-machine signing settings (Team ID)
-AudioCap/Config/Local.xcconfig
+# Local builds and machine-only settings
 build/
+AudioCap/Config/Local.xcconfig
+CLAUDE.local.md

@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="720" viewBox="0 0 1240 720" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <title>Cadena de grabación de AudioCap</title>
+  <desc>App de origen, tap de proceso, dispositivo agregado privado, IOProc, cola de escritura, captura CAF, parar y comprobar, exportación, comprobación de duración; previstos: biblioteca y reproductor, dispositivo virtual Hi-Res y monitorización.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3c4043"/>
+    </marker>
+    <marker id="arrowp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b06000"/>
+    </marker>
+    <style>
+      .t { font-size: 17px; font-weight: 600; fill: #202124; }
+      .s { font-size: 13px; fill: #3c4043; }
+      .h { font-size: 22px; font-weight: 700; fill: #202124; }
+      .lane { paint-order: stroke; stroke: #ffffff; stroke-width: 8px; stroke-linejoin: round; font-size: 13px; font-weight: 600; fill: #5f6368; letter-spacing: 0.08em; }
+      .up { fill: #e8f0fe; stroke: #1a73e8; stroke-width: 2; }
+      .eng { fill: #e6f4ea; stroke: #188038; stroke-width: 2; }
+      .plan { fill: #fef7e0; stroke: #b06000; stroke-width: 2; stroke-dasharray: 7 5; }
+      .a { stroke: #3c4043; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .ap { stroke: #b06000; stroke-width: 2; fill: none; stroke-dasharray: 7 5; marker-end: url(#arrowp); }
+      .al { font-size: 12px; fill: #5f6368; }
+    </style>
+  </defs>
+  <rect width="1240" height="720" fill="#ffffff"/>
+  <text x="40" y="40" class="h">Cadena de grabación de AudioCap</text>
+
+  <!-- Row 0: Hi-Res virtual device (planned) -->
+  <rect x="640" y="62" width="240" height="62" rx="10" class="plan"/>
+  <text x="760" y="88" text-anchor="middle" class="t">AudioCap Hi-Res (PR 6)</text>
+  <text x="760" y="110" text-anchor="middle" class="s">salida virtual, 44,1–192 kHz</text>
+  <path d="M760,124 L760,158" class="ap"/>
+  <text x="772" y="146" class="al">reloj y salida del sistema al grabar</text>
+
+  <!-- Row 1 -->
+  <text x="40" y="154" class="lane">CAPTURA</text>
+  <rect x="40" y="162" width="240" height="80" rx="10" class="up"/>
+  <text x="160" y="196" text-anchor="middle" class="t">App de origen</text>
+  <text x="160" y="220" text-anchor="middle" class="s">Música, Spotify, un navegador…</text>
+
+  <rect x="340" y="162" width="240" height="80" rx="10" class="up"/>
+  <text x="460" y="190" text-anchor="middle" class="t">Tap de proceso</text>
+  <text x="460" y="212" text-anchor="middle" class="s">CATapDescription</text>
+  <text x="460" y="230" text-anchor="middle" class="s">AudioHardwareCreateProcessTap</text>
+
+  <rect x="640" y="162" width="240" height="80" rx="10" class="up"/>
+  <text x="760" y="190" text-anchor="middle" class="t">Dispositivo agregado</text>
+  <text x="760" y="212" text-anchor="middle" class="s">privado; el tap como entrada</text>
+  <text x="760" y="230" text-anchor="middle" class="s">reloj = dispositivo de salida</text>
+
+  <rect x="940" y="162" width="260" height="80" rx="10" class="eng"/>
+  <text x="1070" y="190" text-anchor="middle" class="t">IOProc · cola de E/S</text>
+  <text x="1070" y="212" text-anchor="middle" class="s">tiempo real: copiar y avisar</text>
+  <text x="1070" y="230" text-anchor="middle" class="s">sin malloc, bloqueos ni E/S</text>
+
+  <path d="M280,202 L338,202" class="a"/>
+  <path d="M580,202 L638,202" class="a"/>
+  <path d="M880,202 L938,202" class="a"/>
+  <path d="M1070,242 L1070,318" class="a"/>
+  <text x="1080" y="286" class="al">entrega</text>
+
+  <!-- Row 2 (right to left) -->
+  <text x="40" y="312" class="lane">ESCRITURA Y EXPORTACIÓN</text>
+  <rect x="940" y="320" width="260" height="80" rx="10" class="eng"/>
+  <text x="1070" y="348" text-anchor="middle" class="t">Cola de escritura serie</text>
+  <text x="1070" y="370" text-anchor="middle" class="s">la única dueña del archivo</text>
+  <text x="1070" y="388" text-anchor="middle" class="s">crear · escribir · cerrar</text>
+
+  <rect x="640" y="320" width="240" height="80" rx="10" class="eng"/>
+  <text x="760" y="352" text-anchor="middle" class="t">Captura CAF</text>
+  <text x="760" y="370" text-anchor="middle" class="s">Float32, sin pérdida,</text>
+  <text x="760" y="388" text-anchor="middle" class="s">a la frecuencia del tap</text>
+
+  <rect x="340" y="320" width="240" height="80" rx="10" class="eng"/>
+  <text x="460" y="348" text-anchor="middle" class="t">Parar: cerrar y comprobar</text>
+  <text x="460" y="370" text-anchor="middle" class="s">AudioDeviceStop → vaciar</text>
+  <text x="460" y="388" text-anchor="middle" class="s">→ close() → muestras = cabecera</text>
+
+  <rect x="40" y="320" width="240" height="80" rx="10" class="eng"/>
+  <text x="160" y="348" text-anchor="middle" class="t">Exportación</text>
+  <text x="160" y="370" text-anchor="middle" class="s">WAV Float32 · FLAC 24-bit</text>
+  <text x="160" y="388" text-anchor="middle" class="s">ALAC · AAC 256 (con pérdida)</text>
+
+  <path d="M940,360 L882,360" class="a"/>
+  <path d="M640,360 L582,360" class="a"/>
+  <path d="M340,360 L282,360" class="a"/>
+
+  <!-- Row 3 -->
+  <path d="M160,400 L160,476" class="a"/>
+  <text x="40" y="470" class="lane">COMPROBAR, ESCUCHAR, MONITORIZAR</text>
+  <rect x="40" y="478" width="240" height="80" rx="10" class="eng"/>
+  <text x="160" y="506" text-anchor="middle" class="t">Comprobación de duración</text>
+  <text x="160" y="528" text-anchor="middle" class="s">muestras en cabecera =</text>
+  <text x="160" y="546" text-anchor="middle" class="s">muestras decodificadas</text>
+
+  <path d="M280,518 L338,518" class="ap"/>
+  <rect x="340" y="478" width="300" height="80" rx="10" class="plan"/>
+  <text x="490" y="506" text-anchor="middle" class="t">Biblioteca y reproductor (PR 4)</text>
+  <text x="490" y="528" text-anchor="middle" class="s">estado de conversión, forma de onda, nivel</text>
+  <text x="490" y="546" text-anchor="middle" class="s">Panel de calidad · ~/Music/AudioCap</text>
+
+  <path d="M1070,400 L1070,476" class="ap"/>
+  <text x="1080" y="444" class="al">copia para escuchar</text>
+  <rect x="940" y="478" width="260" height="80" rx="10" class="plan"/>
+  <text x="1070" y="506" text-anchor="middle" class="t">Monitorización (PR 6)</text>
+  <text x="1070" y="528" text-anchor="middle" class="s">suena en los altavoces reales:</text>
+  <text x="1070" y="546" text-anchor="middle" class="s">Bluetooth, pantalla, integrados</text>
+
+  <!-- Legend -->
+  <line x1="40" y1="600" x2="1200" y2="600" stroke="#dadce0" stroke-width="1"/>
+  <rect x="40" y="622" width="36" height="22" rx="5" class="up"/>
+  <text x="86" y="638" class="s">configuración CoreAudio (del proyecto original)</text>
+  <rect x="440" y="622" width="36" height="22" rx="5" class="eng"/>
+  <text x="486" y="638" class="s">motor de grabación (PR 1)</text>
+  <rect x="720" y="622" width="36" height="22" rx="5" class="plan"/>
+  <text x="766" y="638" class="s">previsto</text>
+  <text x="40" y="676" class="s">Solo se remuestrea la copia de monitorización. El archivo conserva la frecuencia a la que suena la app de origen,</text>
+  <text x="40" y="696" class="s">que es la del dispositivo de reloj.</text>
+</svg>
