@@ -19,6 +19,7 @@ Every command below has an explicit timeout. On macOS, `timeout` comes from GNU 
 | Non-writable install dir | `AUDIOCAP_INSTALL_DIR=<root-owned dir> timeout 1200 ./start.sh --no-open </dev/null` | uses sudo if it needs no password, otherwise a clear error and the old copy is kept |
 | Unit tests | `timeout 1200 ./start.sh --test` | exit 0; exit 3 means the checkout has no `AudioCapTests` target |
 | Raw tests | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= test` | `** TEST SUCCEEDED **` |
+| Library, player, quality (PR 4) | launch, record a take, then check the library row, play it, scrub, read **Header / Decoded / Captured** | row reaches "Done" with "Lengths match"; `~/Library/Containers/io.github.juliatic.AudioCap/Data/Library/Application Support/AudioCap/library.json` lists the take |
 | One test | add `-only-testing:AudioCapTests/<Class>/<method>` | |
 | Fixture durations | see `audiocap-audio-quality` | header frames = decoded frames |
 
