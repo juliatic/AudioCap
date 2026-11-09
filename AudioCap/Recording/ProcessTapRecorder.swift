@@ -55,7 +55,7 @@ final class ProcessTapRecorder {
 
     var process: AudioProcess { tap?.process ?? initialProcess }
 
-    /// Seconds of digital silence, while the source app reports that it is playing, before the tap is recreated.
+    /// Seconds of digital silence since the capture started, while the source app reports that it is playing, before warning.
     static let digitalSilenceRecoverySeconds: Double = 2
 
     @ObservationIgnored private weak var tap: ProcessTap?
@@ -338,14 +338,13 @@ final class ProcessTapRecorder {
         if pipeline.hasSeenSignal { sessionHasSignal = true }
         let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
         let wasArmed = silenceGuard.state != .disarmed
-        let action = silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
-                                         sourceIsPlaying: wasArmed && (tap?.isSourceOutputting ?? false), sourceName: process.name)
-        if silenceWarning != silenceGuard.warning { silenceWarning = silenceGuard.warning }
-        if action == .reconnect, UserDefaults.standard.bool(forKey: "DigitalSilenceGuardReconnectDisabled") {
-            logger.notice("Silence guard reconnect skipped (DigitalSilenceGuardReconnectDisabled)")
-        } else if action == .reconnect, let tap {
-            logger.warning("No signal for \(silentSeconds, privacy: .public) s since the capture started while the source is playing; recreating the tap")
-            tap.recreateTap(reason: "no signal since the capture started")
+        silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
+                            sourceIsPlaying: wasArmed && (tap?.isSourceOutputting ?? false), sourceName: process.name)
+        if silenceWarning != silenceGuard.warning {
+            if silenceGuard.warning != nil {
+                logger.warning("No signal for \(silentSeconds, privacy: .public) s since the capture started while the source is playing")
+            }
+            silenceWarning = silenceGuard.warning
         }
     }
 
