@@ -20,7 +20,8 @@ final class HiResController {
     /// Last notice for the UI (device lost, start failure, crash recovery). Localized.
     private(set) var message: String?
 
-    var isRouted: Bool { router.isRouted }
+    /// Mirrors the router so views refresh when a take is routed or restored (Settings is disabled while routed).
+    private(set) var isRouted = false
     /// The monitor while routed; the recorder pushes captured buffers into it on its capture queue.
     var activeMonitor: AudioMonitor? { router.isRouted ? monitor : nil }
 
@@ -34,7 +35,7 @@ final class HiResController {
         set { settings.isMonitorMuted = newValue; monitor.isMuted = newValue }
     }
 
-    @ObservationIgnored private let system: CoreAudioOutputSystem
+    @ObservationIgnored private let system: AudioOutputSystem
     @ObservationIgnored private let router: HiResRouter
     @ObservationIgnored private let monitor = AudioMonitor()
     @ObservationIgnored private weak var tap: ProcessTap?
@@ -44,9 +45,12 @@ final class HiResController {
     @ObservationIgnored private var musicObserver: NSObjectProtocol?
     @ObservationIgnored private var terminateObserver: NSObjectProtocol?
     @ObservationIgnored private var didRecover = false
+    /// Bumped on every fresh monitor start and on `end()`, so a pending retry of an older start is dropped.
+    @ObservationIgnored private var monitorAttempt = 0
     @ObservationIgnored private let logger = Logger(subsystem: kAppSubsystem, category: "HiResController")
+    @ObservationIgnored var monitorRetryDelay: Duration = .milliseconds(500)
 
-    init(settings: HiResSettings = .shared, system: CoreAudioOutputSystem = CoreAudioOutputSystem(), store: HiResRestoreStore = HiResRestoreStore()) {
+    init(settings: HiResSettings = .shared, system: AudioOutputSystem = CoreAudioOutputSystem(), store: HiResRestoreStore = HiResRestoreStore()) {
         self.settings = settings
         self.system = system
         self.router = HiResRouter(system: system, store: store)
@@ -76,14 +80,21 @@ final class HiResController {
     /// Routes the system output to the Hi-Res device (when enabled and installed) and rebuilds `tap`'s aggregate on it.
     func begin(for tap: ProcessTap) {
         recoverOnLaunch()
+        guard beginRoute(sourceBundleID: tap.process.bundleID, tap: tap) else { return }
+        tap.syncAggregateWithDefaultOutput()
+    }
+
+    /// The routing part of `begin(for:)`. Returns `false` when Hi-Res stays out of this take (off, no driver, routed).
+    @discardableResult
+    func beginRoute(sourceBundleID: String?, tap: ProcessTap? = nil) -> Bool {
         isDriverAvailable = router.isVirtualDeviceAvailable
-        guard settings.isEnabled, isDriverAvailable, !router.isRouted else { return }
+        guard settings.isEnabled, isDriverAvailable, !router.isRouted else { return false }
         self.tap = tap
         message = nil
 
-        let isMusic = tap.process.bundleID == HiResRatePolicy.musicBundleID
+        let isMusic = sourceBundleID == HiResRatePolicy.musicBundleID
         let trackRate = isMusic ? MusicTrackRate.fetch(timeout: 1.5) { [weak self] rate in self?.applyMusicRate(rate) } : nil
-        let decision = HiResRatePolicy.decide(sourceBundleID: tap.process.bundleID, musicTrackRate: trackRate, fixedRate: settings.fixedRate)
+        let decision = HiResRatePolicy.decide(sourceBundleID: sourceBundleID, musicTrackRate: trackRate, fixedRate: settings.fixedRate)
         do {
             let target = try router.route(rate: decision.rate)
             rateDecision = decision
@@ -94,7 +105,8 @@ final class HiResController {
             message = String(localized: "Hi-Res could not start: \(error.audioCapDescription). Recording without it.")
             self.tap = nil
         }
-        tap.syncAggregateWithDefaultOutput()
+        isRouted = router.isRouted
+        return true
     }
 
     /// The capture format is known or changed: (re)starts the monitor at that rate.
@@ -107,11 +119,13 @@ final class HiResController {
     /// Stops the monitor and restores the remembered output.
     func end() {
         removeRouteListeners()
+        monitorAttempt += 1
         monitor.stop()
         monitorOutputRate = nil
         captureFormat = nil
         guard router.isRouted else { return }
         router.restore()
+        isRouted = router.isRouted
         rateDecision = nil
         monitorDevice = nil
         tap?.syncAggregateWithDefaultOutput()
@@ -143,16 +157,30 @@ final class HiResController {
 
     // MARK: - Events
 
-    private func restartMonitor() {
+    /// Starts the monitor; a failure is retried once after `monitorRetryDelay` (the real output can refuse to start
+    /// with 'nope' while CoreAudio is still applying the switch to the Hi-Res device) before it is shown.
+    private func restartMonitor(isRetry: Bool = false) {
         guard let format = captureFormat, let device = router.monitorTarget else { return }
+        if !isRetry { monitorAttempt += 1 }
+        let attempt = monitorAttempt
         do {
             try monitor.start(format: format, device: device, deviceID: system.deviceID(uid: device.uid))
             monitorDevice = device
             monitorOutputRate = monitor.outputSampleRate
+            if isRetry { logger.info("Monitor started on the second attempt") }
         } catch {
-            logger.error("Monitor failed: \(error.audioCapDescription, privacy: .public)")
+            logger.error("Monitor failed\(isRetry ? " again" : "", privacy: .public): \(error.audioCapDescription, privacy: .public)")
             monitorOutputRate = nil
-            message = String(localized: "Monitor unavailable: \(error.audioCapDescription)")
+            guard isRetry else {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: self?.monitorRetryDelay ?? .zero)
+                    guard let self, attempt == monitorAttempt, router.isRouted else { return }
+                    restartMonitor(isRetry: true)
+                }
+                return
+            }
+            let detail = (error as? AudioMonitor.StartError)?.underlying.audioCapDescription ?? error.audioCapDescription
+            message = String(localized: "Monitor unavailable on \(device.name): \(detail) The recording is not affected.")
         }
     }
 
@@ -165,7 +193,9 @@ final class HiResController {
             let name = restored?.name ?? "-"
             message = String(localized: "AudioCap Hi-Res disappeared. The output is back on \(name); recording continues at that device's rate.")
             removeRouteListeners()
+            monitorAttempt += 1
             monitor.stop()
+            isRouted = router.isRouted
             rateDecision = nil
             monitorDevice = nil
             monitorOutputRate = nil

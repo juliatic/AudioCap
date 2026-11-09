@@ -91,6 +91,13 @@ final class MonitorRingBuffer: @unchecked Sendable {
 /// Plays the tapped audio on a real output device (Bluetooth, display or built-in speakers) while the Hi-Res device is
 /// the system output. Only this copy is resampled, by AVAudioEngine, to the device's rate; the recording is untouched.
 final class AudioMonitor {
+    /// Which step of `start` failed, so the log tells a refused device from a refused engine start.
+    struct StartError: LocalizedError {
+        let step: String
+        let underlying: Error
+        var errorDescription: String? { "\(step): \(underlying.audioCapDescription)" }
+    }
+
     private let logger = Logger(subsystem: kAppSubsystem, category: "AudioMonitor")
     private var engine: AVAudioEngine?
     /// Ring fed by the recorder's I/O block. Kept across engine restarts (device changes) while the format is the same.
@@ -112,7 +119,11 @@ final class AudioMonitor {
             throw "The monitor cannot use \(format.description)."
         }
         let engine = AVAudioEngine()
-        try engine.outputNode.auAudioUnit.setDeviceID(deviceID)
+        do {
+            try engine.outputNode.auAudioUnit.setDeviceID(deviceID)
+        } catch {
+            throw StartError(step: "Selecting \(device.name) for the monitor", underlying: error)
+        }
         let source = AVAudioSourceNode(format: sourceFormat) { _, _, frameCount, audioBufferList in
             buffer.read(into: UnsafeMutableAudioBufferListPointer(audioBufferList), frames: Int(frameCount))
             return noErr
@@ -121,7 +132,11 @@ final class AudioMonitor {
         engine.connect(source, to: engine.mainMixerNode, format: sourceFormat)
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
         engine.prepare()
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            throw StartError(step: "Starting the monitor engine on \(device.name)", underlying: error)
+        }
         self.engine = engine
         self.format = format
         self.device = device
