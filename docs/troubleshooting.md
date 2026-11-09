@@ -21,9 +21,13 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 | `1937010544` | `'stop'` | The device is not running. | Start playback in the source app and start again. |
 | `2003329396` | `'what'` | Unspecified CoreAudio error. | Report it with diagnostics. |
 
+![The '!obj' error in the current build, on a Mac with no output device](images/en/error-no-output.png)
+
 ## Permission
 
 AudioCap needs **System Audio Recording** permission. On first use macOS shows "“AudioCap” would like access to record your system audio." Click **Allow**. macOS may also ask for microphone access when you start a recording.
+
+![Microphone prompt when a recording starts](images/en/microphone-prompt.png)
 
 If you clicked **Don't Allow**, or the prompt never appears:
 

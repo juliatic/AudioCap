@@ -21,9 +21,13 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 | `1937010544` | `'stop'` | El dispositivo no está en marcha. | Pon algo a sonar en la app de origen y vuelve a empezar. |
 | `2003329396` | `'what'` | Error de CoreAudio sin especificar. | Abre una incidencia con el diagnóstico. |
 
+![El error '!obj' en la versión actual, en un Mac sin salida de audio (interfaz aún en inglés)](images/en/error-no-output.png)
+
 ## Permiso
 
 AudioCap necesita el permiso de **grabación de audio del sistema**. La primera vez, macOS pregunta si AudioCap puede grabar el audio del sistema: pulsa **Permitir**. Al empezar a grabar, macOS también puede pedir acceso al micrófono.
+
+![Aviso de micrófono al empezar a grabar](images/en/microphone-prompt.png)
 
 Si pulsaste **No permitir** o el aviso no aparece:
 
