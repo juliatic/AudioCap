@@ -194,13 +194,17 @@ final class ProcessTap {
     }
 
     private func stopIO() {
+        stopIO(deviceProcID, on: aggregateDeviceID)
+        deviceProcID = nil
+    }
+
+    private func stopIO(_ procID: AudioDeviceIOProcID?, on device: AudioObjectID) {
         isRunning = false
-        guard aggregateDeviceID.isValid, let deviceProcID else { return }
-        var err = AudioDeviceStop(aggregateDeviceID, deviceProcID)
+        guard device.isValid, let procID else { return }
+        var err = AudioDeviceStop(device, procID)
         if err != noErr { logger.warning("AudioDeviceStop: \(AudioStatus.describe(err), privacy: .public)") }
-        err = AudioDeviceDestroyIOProcID(aggregateDeviceID, deviceProcID)
+        err = AudioDeviceDestroyIOProcID(device, procID)
         if err != noErr { logger.warning("AudioDeviceDestroyIOProcID: \(AudioStatus.describe(err), privacy: .public)") }
-        self.deviceProcID = nil
     }
 
     // MARK: - Format
@@ -341,11 +345,19 @@ final class ProcessTap {
     }
 
     private func destroyAggregateAndTap() {
-        destroyAggregateDevice()
-        if processTapID.isValid {
-            let err = AudioHardwareDestroyProcessTap(processTapID)
+        destroy(aggregate: aggregateDeviceID, tap: processTapID)
+        aggregateDeviceID = .unknown
+        processTapID = .unknown
+    }
+
+    private func destroy(aggregate: AudioObjectID, tap: AudioObjectID) {
+        if aggregate.isValid {
+            let err = AudioHardwareDestroyAggregateDevice(aggregate)
+            if err != noErr { logger.warning("Destroying the aggregate device: \(AudioStatus.describe(err), privacy: .public)") }
+        }
+        if tap.isValid {
+            let err = AudioHardwareDestroyProcessTap(tap)
             if err != noErr { logger.warning("Destroying the process tap: \(AudioStatus.describe(err), privacy: .public)") }
-            processTapID = .unknown
         }
     }
 
@@ -416,28 +428,41 @@ final class ProcessTap {
         isSourceAvailable && process.objectID.readProcessIsRunningOutput()
     }
 
-    /// Destroys and recreates the tap and the aggregate device, restarting I/O if it was running.
+    /// Replaces the tap and the aggregate device with fresh ones, restarting I/O if it was running.
     /// Used to refresh a tap idling on digital silence (see `IdleTapRefresh`); the silence guard only warns.
+    /// The new tap and aggregate are built while the old ones still run, so capture stops only for the switch;
+    /// if building fails, the old ones keep running.
     @MainActor
     func recreateTap(reason: String) {
         guard activated, isSourceAvailable else { return }
         logger.info("Recreating the tap: \(reason, privacy: .public)")
         pendingRebuild?.cancel()
         let wasRunning = wantsRunning && deviceProcID != nil
-        if wasRunning { eventHandler?(.willReconfigure) }
-        stopIO()
-        destroyAggregateAndTap()
+        let old = (tap: processTapID, uuid: tapUUID, aggregate: aggregateDeviceID, proc: deviceProcID,
+                   output: aggregateOutputDevice, rate: aggregateSampleRate, tapFormat: tapStreamDescription)
         do {
             try prepare(for: process.objectID)
-            if wasRunning {
+        } catch {
+            logger.error("Recreating the tap failed, keeping the current one: \(error.audioCapDescription, privacy: .public)")
+            if processTapID != old.tap { destroyAggregateAndTap() }
+            (processTapID, tapUUID, aggregateDeviceID, deviceProcID) = (old.tap, old.uuid, old.aggregate, old.proc)
+            (aggregateOutputDevice, aggregateSampleRate, tapStreamDescription) = (old.output, old.rate, old.tapFormat)
+            return
+        }
+        if wasRunning {
+            eventHandler?(.willReconfigure)
+            stopIO(old.proc, on: old.aggregate)
+            deviceProcID = nil
+            do {
                 let format = try startIO()
                 eventHandler?(.reconfigured(format))
+            } catch {
+                logger.error("Recreating the tap failed: \(error.audioCapDescription, privacy: .public)")
+                errorMessage = error.audioCapDescription
+                eventHandler?(.failed(error))
             }
-        } catch {
-            logger.error("Recreating the tap failed: \(error.audioCapDescription, privacy: .public)")
-            errorMessage = error.audioCapDescription
-            if wasRunning { eventHandler?(.failed(error)) }
         }
+        destroy(aggregate: old.aggregate, tap: old.tap)
     }
 
     @MainActor
