@@ -63,3 +63,20 @@ enum IdleTapRefresh {
         return (secondsSinceLastRefresh ?? .infinity) >= interval
     }
 }
+
+/// When to recreate a tap that chops a playing source while a take is open.
+///
+/// The same long-idle tap can open a take on a sliver of sound and then deliver mostly all-zero cycles with short
+/// bursts between them while the source plays (engine harness, 48 kHz, 60 s of silence then a 3 s tone: 1 of 6
+/// runs kept 0.51 s of the tone in 35 bursts). A fresh tap delivers the source again, so the recorder rebuilds
+/// once `cuts` cuts arrive without `CapturePipeline.cleanSignalSeconds` of clean signal between them, at most
+/// every `interval`; the rebuild is reported on the take as a reconnect.
+enum ChoppedCapture {
+    static let cuts = 3
+    static let interval: Double = 10
+
+    static func shouldRebuild(isTakeOpen: Bool, cuts: Int, sourceIsPlaying: Bool, secondsSinceLastRebuild: Double?) -> Bool {
+        guard isTakeOpen, sourceIsPlaying, cuts >= Self.cuts else { return false }
+        return (secondsSinceLastRebuild ?? .infinity) >= interval
+    }
+}

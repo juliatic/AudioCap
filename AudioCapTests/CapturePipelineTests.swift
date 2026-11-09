@@ -111,13 +111,75 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
     }
 
     /// Signal, then `zeroCycles` all-zero cycles of 480 frames, then signal again; a 440 Hz-ish square keeps edges loud.
-    private func feedCut(_ pipeline: CapturePipeline, zeroCycles: Int) {
+    private func feedCut(_ pipeline: CapturePipeline, zeroCycles: Int, loudCycles: Int = 20) {
         var next = 0
         var sampleTime = 0.0
         let loud: (Int, Int) -> Float = { _, _ in 0.5 }
-        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
+        feed(pipeline, cycles: loudCycles, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
         feed(pipeline, cycles: zeroCycles, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
-        feed(pipeline, cycles: 20, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
+        feed(pipeline, cycles: loudCycles, sizes: [480], start: &next, sampleTime: &sampleTime, value: loud)
+    }
+
+    /// A one-cycle burst, then 2.7 s of zeros while the source plays; every `sliverEvery` cycles one carries 16 frames
+    /// of signal mid-cycle, as the live failure did, so no cycle edge is loud.
+    private func feedBurstThenZeros(_ pipeline: CapturePipeline, sliverEvery: Int? = nil) {
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 1, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0.5 }
+        let zerosStart = next
+        feed(pipeline, cycles: 270, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in
+            guard let sliverEvery else { return 0 }
+            let offset = i - zerosStart
+            let inCycle = offset % (480 * sliverEvery)
+            return offset >= 480 && inCycle >= 200 && inCycle < 216 ? 0.5 : 0
+        }
+        pipeline.finish()
+    }
+
+    func testTinyBurstThenZerosWhileTheSourcePlaysIsFlagged() throws {
+        let collector = Collector()
+        feedBurstThenZeros(makePipeline(collector))
+        let warning = try XCTUnwrap(collector.closed.first?.warning)
+        XCTAssertTrue(warning.contains("Most of this take after its first sound is digital zero (2.700 s of 2.710 s)"), warning)
+    }
+
+    func testSliversBetweenZerosWhileTheSourcePlaysAreFlagged() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        feedBurstThenZeros(pipeline, sliverEvery: 50)
+        XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 0) // the dropout check needs loud cycle edges
+        let warning = try XCTUnwrap(collector.closed.first?.warning)
+        XCTAssertTrue(warning.contains("Most of this take after its first sound is digital zero"), warning)
+    }
+
+    func testChoppedSignalCountsCutsAndCleanSignalClearsThem() {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        feedBurstThenZeros(pipeline, sliverEvery: 50) // the burst and 5 slivers, each followed by zeros
+        XCTAssertEqual(pipeline.chops.load(ordering: .relaxed), 6)
+
+        let clean = makePipeline(collector)
+        feedCut(clean, zeroCycles: 40, loudCycles: 60) // one cut, then 0.6 s of clean signal
+        XCTAssertEqual(clean.chops.load(ordering: .relaxed), 0)
+        clean.finish()
+        pipeline.finish()
+    }
+
+    func testZerosWhileTheSourceIsNotPlayingOrAShortTailAreNotFlagged() {
+        let collector = Collector()
+        let quiet = makePipeline(collector)
+        quiet.sourceIsOutputting.store(false, ordering: .relaxed)
+        feedBurstThenZeros(quiet)
+        XCTAssertNil(collector.closed.first?.warning)
+
+        let tail = Collector()
+        let pipeline = makePipeline(tail)
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 300, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in sin(Float(i) * 0.0576) * 0.5 }
+        feed(pipeline, cycles: 90, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 } // 0.9 s
+        pipeline.finish()
+        XCTAssertNil(tail.closed.first?.warning)
     }
 
     func testZerosCuttingIntoSignalAreReportedAsMissingAudio() throws {
@@ -130,6 +192,22 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let warning = try XCTUnwrap(collector.closed.first?.warning)
         XCTAssertTrue(warning.contains("0.400 s"), warning)
         XCTAssertFalse(warning.contains("timeline jumped"))
+    }
+
+    func testHolesInsideCyclesBetweenLoudSamplesAreReportedAsMissingAudio() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        var next = 0
+        var sampleTime = 0.0
+        // 23 zero frames in every 480-frame cycle of a loud tone, as the live failure delivered.
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime) { index, _ in
+            index % 480 >= 200 && index % 480 < 223 ? 0 : 0.5
+        }
+        XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 0) // no all-zero cycle
+        pipeline.finish()
+        let warning = try XCTUnwrap(collector.closed.first?.warning)
+        XCTAssertTrue(warning.contains("100 time(s)"), warning)
+        XCTAssertTrue(warning.contains("2300 frames"), warning)
     }
 
     /// One take of sound, a split, then an idle refresh that leaves `gapFrames` uncaptured, `silentCycles` of zeros
@@ -176,7 +254,7 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
     func testLongSilenceOrSilentSourceIsNotADropout() throws {
         let collector = Collector()
         let pipeline = makePipeline(collector)
-        feedCut(pipeline, zeroCycles: 150) // 1.5 s: a track gap, not a dropout
+        feedCut(pipeline, zeroCycles: 150, loudCycles: 300) // 1.5 s between 3 s tracks: a track gap, not a dropout
         XCTAssertEqual(pipeline.dropouts.load(ordering: .relaxed), 0)
         pipeline.finish()
         XCTAssertNil(collector.closed.first?.warning)

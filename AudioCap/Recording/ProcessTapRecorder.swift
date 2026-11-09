@@ -77,6 +77,8 @@ final class ProcessTapRecorder {
     @ObservationIgnored private var lastIdleTapRefresh: Date?
     @ObservationIgnored private var isRefreshingIdleTap = false
     @ObservationIgnored private(set) var idleTapRefreshes = 0
+    @ObservationIgnored private var lastChopRebuild: Date?
+    @ObservationIgnored private(set) var chopRebuilds = 0
     /// I/O cycles that arrived while no pipeline was attached (between takes or while gated).
     @ObservationIgnored private let unattachedCycles = AtomicCounter()
     @ObservationIgnored private var eventContinuations: [UUID: AsyncStream<TakeEvent>.Continuation] = [:]
@@ -129,6 +131,8 @@ final class ProcessTapRecorder {
         silenceGuard.reset()
         lastIdleTapRefresh = nil
         idleTapRefreshes = 0
+        lastChopRebuild = nil
+        chopRebuilds = 0
         silenceWarning = nil
         sessionHasSignal = false
         session = SessionSettings(outputFormat: settings.outputFormat, autoSplit: settings.autoSplitOnSilence,
@@ -325,6 +329,21 @@ final class ProcessTapRecorder {
         if framesWritten != frames { framesWritten = frames }
         checkDigitalSilence(pipeline)
         refreshIdleTapIfNeeded(pipeline)
+        rebuildChoppedTapIfNeeded(pipeline)
+    }
+
+    @MainActor
+    private func rebuildChoppedTapIfNeeded(_ pipeline: CapturePipeline) {
+        let cuts = pipeline.chops.load(ordering: .relaxed)
+        guard let tap,
+              ChoppedCapture.shouldRebuild(isTakeOpen: pipeline.isTakeOpen.load(ordering: .relaxed), cuts: cuts,
+                                           sourceIsPlaying: tap.isSourceOutputting,
+                                           secondsSinceLastRebuild: lastChopRebuild.map { Date().timeIntervalSince($0) })
+        else { return }
+        lastChopRebuild = Date()
+        chopRebuilds += 1
+        logger.warning("Capture chopped (\(cuts, privacy: .public) cuts to digital zero while the source plays); recreating the tap")
+        tap.recreateTap(reason: "\(cuts) cuts to digital zero in the open take while the source plays")
     }
 
     @MainActor
@@ -414,6 +433,7 @@ final class ProcessTapRecorder {
         if let pipeline {
             lines.append("Device timeline: \(pipeline.discontinuities.load(ordering: .relaxed)) jumps, \(pipeline.skippedFrames.load(ordering: .relaxed)) frames skipped")
             let refreshGap = Double(pipeline.idleRefreshGapFrames.load(ordering: .relaxed)) / pipeline.format.sampleRate
+            lines.append("Rebuilds of a chopped tap: \(chopRebuilds)")
             lines.append("Idle tap refreshes: \(idleTapRefreshes), uncaptured \(refreshGap.formatted(.number.precision(.fractionLength(3)))) s in total")
             lines.append("Dropouts (zeros mid-signal while the source plays): \(pipeline.dropouts.load(ordering: .relaxed)), \(pipeline.dropoutFrames.load(ordering: .relaxed)) frames")
             lines.append("Capture pipeline: \(pipeline.ioCycles.load(ordering: .relaxed)) I/O cycles, \(pipeline.layoutMismatches.load(ordering: .relaxed)) layout mismatches, \(pipeline.ring.overflowFrames.load(ordering: .relaxed)) overflow frames, ring \(pipeline.ring.capacity) frames, digital silence run \(pipeline.digitalSilenceRun.load(ordering: .relaxed)) frames")
