@@ -21,6 +21,10 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
             lock.lock(); defer { lock.unlock() }
             return events.compactMap { if case .closed(let take) = $0 { take } else { nil } }
         }
+        var amended: [(RecordingTake.ID, String)] {
+            lock.lock(); defer { lock.unlock() }
+            return events.compactMap { if case .amended(let id, let warning) = $0 { (id, warning) } else { nil } }
+        }
     }
 
     private func makePipeline(_ collector: Collector, detector: SilenceDetector? = nil, bufferedSeconds: Double = 4) -> CapturePipeline {
@@ -176,7 +180,9 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let pipeline = makePipeline(tail)
         var next = 0
         var sampleTime = 0.0
-        feed(pipeline, cycles: 300, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in sin(Float(i) * 0.0576) * 0.5 }
+        feed(pipeline, cycles: 300, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in
+            sin(Float(i) * 0.0576) * 0.5 * min(1, Float(144_000 - i) / 4_800) // fades out over the last 0.1 s
+        }
         feed(pipeline, cycles: 90, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 } // 0.9 s
         pipeline.finish()
         XCTAssertNil(tail.closed.first?.warning)
@@ -215,13 +221,13 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
     private func feedRefresh(_ pipeline: CapturePipeline, gapFrames: Int, silentCycles: Int) {
         var next = 0
         var sampleTime = 0.0
-        let tone: (Int, Int) -> Float = { _, _ in 0.5 }
-        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime) { i, _ in 0.5 * min(1, Float(48_000 - i) / 4_800) }
         feed(pipeline, cycles: 200, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
         pipeline.noteReconnect(chargesTake: false)
         sampleTime += Double(gapFrames)
         feed(pipeline, cycles: silentCycles, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
-        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        let restart = next
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime) { i, c in Self.tone(i - restart, c) }
         pipeline.finish()
     }
 
@@ -278,6 +284,91 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         pipeline.finish()
     }
 
+    /// A continuous 440 Hz tone: frame `i` of it, whatever was cut before.
+    private static func tone(_ i: Int, _ channel: Int) -> Float {
+        0.5 * Float(sin(2 * Double.pi * 440 * Double(i) / 48_000))
+    }
+
+    /// One second of tone, cut mid-waveform to 1.5 s of zeros, then the same tone resuming mid-waveform; silence
+    /// splitting closes the first take during the zeros. The Hi-Res run's shape with a 10 s gap.
+    func testAbruptCutGapAndOnsetLinkTheTwoTakes() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        var next = 0
+        var sampleTime = 0.0
+        let cut = 48_027 // a quarter period after a zero crossing: the tone is at its peak
+        let gap = 72_000
+        feed(pipeline, cycles: cut / 9, sizes: [9], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        feed(pipeline, cycles: gap / 480, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        pipeline.finish()
+
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        let (first, second) = (try XCTUnwrap(takes.first), try XCTUnwrap(takes.last))
+        XCTAssertTrue(first.warning?.contains("Audio stopped abruptly at 1.000 s while test was playing") == true, first.warning ?? "")
+        XCTAssertFalse(first.warning?.contains("started abruptly") == true)
+        let secondWarning = try XCTUnwrap(second.warning)
+        XCTAssertTrue(secondWarning.contains("Audio started abruptly mid-waveform at"), secondWarning)
+        XCTAssertTrue(secondWarning.contains("This take and the previous one may be one passage split by a CoreAudio dropout; 1.500 s between them"), secondWarning)
+        XCTAssertFalse(secondWarning.contains("stopped abruptly"))
+        let amended = collector.amended
+        XCTAssertEqual(amended.count, 1)
+        XCTAssertEqual(amended.first?.0, first.id)
+        XCTAssertTrue(amended.first?.1.contains("This take and the next one may be one passage split by a CoreAudio dropout; 1.500 s between them") == true)
+    }
+
+    /// The same shape with a real fade-out, and the next sound starting from a zero crossing: nothing is abrupt.
+    func testFadeOutThenSoundFromZeroIsNotAbrupt() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime) { i, c in
+            Self.tone(i, c) * min(1, max(0, Float(48_000 - i) / 24_000))
+        }
+        feed(pipeline, cycles: 150, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        let restart = next
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime) { i, c in Self.tone(i - restart, c) }
+        pipeline.finish()
+
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        XCTAssertTrue(takes.allSatisfy { $0.warning == nil }, takes.compactMap(\.warning).joined(separator: " | "))
+        XCTAssertTrue(collector.amended.isEmpty)
+    }
+
+    /// A cut while the source stops (end of a track) is not abrupt, and nothing links across a source that stopped.
+    func testCutWhileTheSourceStoppedIsNotAbrupt() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 48_027 / 9, sizes: [9], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        pipeline.sourceIsOutputting.store(false, ordering: .relaxed)
+        feed(pipeline, cycles: 150, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        pipeline.sourceIsOutputting.store(true, ordering: .relaxed)
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: Self.tone)
+        pipeline.finish()
+
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        XCTAssertFalse(takes.first?.warning?.contains("stopped abruptly") == true, takes.first?.warning ?? "")
+        XCTAssertFalse(takes.last?.warning?.contains("started abruptly") == true, takes.last?.warning ?? "")
+        XCTAssertTrue(collector.amended.isEmpty)
+    }
+
+    /// Auto-record: take A's 0.5 s tail, 10 s armed, then take B opening with 0.5 s of pre-roll plus the 512-frame
+    /// trigger chunk, its sound 0.4 s in. The pre-roll was read while armed and is counted once.
+    func testSplitGapCountsArmedZerosOnce() {
+        let rate = 96_000
+        let gap = PassageEdges.splitGapFrames(previousTrailingZeros: rate / 2,
+                                              framesWithoutTake: 10 * rate + rate / 2 + 512,
+                                              openingFrames: rate / 2 + 512,
+                                              leadingZeros: rate * 4 / 10)
+        XCTAssertEqual(gap, rate / 2 + 10 * rate + rate * 4 / 10)
+    }
+
     func testTimelineJumpIsChargedOnlyToItsOwnTake() throws {
         let collector = Collector()
         let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
@@ -288,7 +379,8 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         sampleTime += 300
         feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
         feed(pipeline, cycles: 200, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
-        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        let restart = next
+        feed(pipeline, cycles: 50, sizes: [480], start: &next, sampleTime: &sampleTime) { i, c in Self.tone(i - restart, c) }
         pipeline.finish()
         let takes = collector.closed
         XCTAssertEqual(takes.count, 2)
