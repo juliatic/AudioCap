@@ -73,6 +73,10 @@ final class ProcessTapRecorder {
     @ObservationIgnored private var silenceGuard = DigitalSilenceGuard(seconds: ProcessTapRecorder.digitalSilenceRecoverySeconds)
     /// A non-zero sample arrived since `start()` (in any take or pipeline).
     @ObservationIgnored private var sessionHasSignal = false
+    /// See `IdleTapRefresh`. Main thread only.
+    @ObservationIgnored private var lastIdleTapRefresh: Date?
+    @ObservationIgnored private var isRefreshingIdleTap = false
+    @ObservationIgnored private(set) var idleTapRefreshes = 0
     /// I/O cycles that arrived while no pipeline was attached (between takes or while gated).
     @ObservationIgnored private let unattachedCycles = AtomicCounter()
     @ObservationIgnored private var eventContinuations: [UUID: AsyncStream<TakeEvent>.Continuation] = [:]
@@ -123,6 +127,8 @@ final class ProcessTapRecorder {
         guard let tap else { throw "The process tap is not available." }
         lastError = nil
         silenceGuard.reset()
+        lastIdleTapRefresh = nil
+        idleTapRefreshes = 0
         silenceWarning = nil
         sessionHasSignal = false
         session = SessionSettings(outputFormat: settings.outputFormat, autoSplit: settings.autoSplitOnSilence,
@@ -170,7 +176,7 @@ final class ProcessTapRecorder {
             ioQueue.sync {
                 io.isGated = true
                 // The restarted device has a new sample timeline; that is a reconnect, not a lost-audio jump.
-                io.pipeline?.noteReconnect()
+                io.pipeline?.noteReconnect(chargesTake: !isRefreshingIdleTap)
             }
         case .willStart(let format):
             // Install the pipeline before AudioDeviceStart so the first I/O cycles are kept.
@@ -318,6 +324,22 @@ final class ProcessTapRecorder {
         let frames = AVAudioFramePosition(pipeline.currentTakeFrames.load(ordering: .relaxed))
         if framesWritten != frames { framesWritten = frames }
         checkDigitalSilence(pipeline)
+        refreshIdleTapIfNeeded(pipeline)
+    }
+
+    @MainActor
+    private func refreshIdleTapIfNeeded(_ pipeline: CapturePipeline) {
+        let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
+        guard silentSeconds >= IdleTapRefresh.interval, let tap,
+              IdleTapRefresh.shouldRefresh(isTakeOpen: pipeline.isTakeOpen.load(ordering: .relaxed), silentSeconds: silentSeconds,
+                                           sourceIsPlaying: tap.isSourceOutputting,
+                                           secondsSinceLastRefresh: lastIdleTapRefresh.map { Date().timeIntervalSince($0) })
+        else { return }
+        lastIdleTapRefresh = Date()
+        idleTapRefreshes += 1
+        isRefreshingIdleTap = true
+        tap.recreateTap(reason: "no take open and \(Int(silentSeconds)) s of digital silence while the source plays")
+        isRefreshingIdleTap = false
     }
 
     /// Guards against a capture that never delivers signal (seen right after the permission is granted).
@@ -325,6 +347,7 @@ final class ProcessTapRecorder {
     @MainActor
     private func checkDigitalSilence(_ pipeline: CapturePipeline) {
         if pipeline.hasSeenSignal { sessionHasSignal = true }
+        pipeline.sourceIsOutputting.store(tap?.isSourceOutputting ?? false, ordering: .relaxed)
         let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
         let wasArmed = silenceGuard.state != .disarmed
         silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
@@ -390,6 +413,8 @@ final class ProcessTapRecorder {
         lines.append("I/O cycles with no pipeline attached: \(unattachedCycles.value.load(ordering: .relaxed))")
         if let pipeline {
             lines.append("Device timeline: \(pipeline.discontinuities.load(ordering: .relaxed)) jumps, \(pipeline.skippedFrames.load(ordering: .relaxed)) frames skipped")
+            lines.append("Idle tap refreshes: \(idleTapRefreshes)")
+            lines.append("Dropouts (zeros mid-signal while the source plays): \(pipeline.dropouts.load(ordering: .relaxed)), \(pipeline.dropoutFrames.load(ordering: .relaxed)) frames")
             lines.append("Capture pipeline: \(pipeline.ioCycles.load(ordering: .relaxed)) I/O cycles, \(pipeline.layoutMismatches.load(ordering: .relaxed)) layout mismatches, \(pipeline.ring.overflowFrames.load(ordering: .relaxed)) overflow frames, ring \(pipeline.ring.capacity) frames, digital silence run \(pipeline.digitalSilenceRun.load(ordering: .relaxed)) frames")
         }
         if let silenceWarning { lines.append("Silence warning: \(silenceWarning)") }

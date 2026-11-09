@@ -417,7 +417,7 @@ final class ProcessTap {
     }
 
     /// Destroys and recreates the tap and the aggregate device, restarting I/O if it was running.
-    /// Not used by the silence guard (it only warns); kept for diagnostics and for future routing changes.
+    /// Used to refresh a tap idling on digital silence (see `IdleTapRefresh`); the silence guard only warns.
     @MainActor
     func recreateTap(reason: String) {
         guard activated, isSourceAvailable else { return }
