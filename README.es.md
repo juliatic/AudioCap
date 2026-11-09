@@ -21,7 +21,7 @@ Problemas conocidos de la versión actual (los resuelve el nuevo motor de grabac
 
 Previsto (los detalles están en el plan):
 - **Nuevo motor de grabación** (PR 1): captura sin pérdida en CAF, FLAC de 24 bits, ALAC, WAV Float32 y AAC a 256 kbps; comprobación de duración en cada archivo; códigos de error descifrados y un botón **Copiar diagnóstico**.
-- **Grabación automática** (PR 3): la dejas preparada y empieza a grabar cuando la app suena y se detiene tras un silencio. Además, una fuente "Todo el audio del sistema".
+- **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con medio segundo previo) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
 - **Biblioteca y reproductor** (PR 4): cada toma con su estado (grabando, convirtiendo, lista, con error), un reproductor con forma de onda, un medidor de nivel, un panel de **Calidad** y la carpeta de destino `~/Music/AudioCap`.
 - **Interfaz en español e inglés** (PR 5), con texto de 16 pt como mínimo.
 - **Modo Hi-Res** (PR 6): graba a la frecuencia completa del original aunque escuches por Bluetooth o por los altavoces de la pantalla.

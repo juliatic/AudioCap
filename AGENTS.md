@@ -34,7 +34,8 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 | Serial writer | one serial queue owns the `AVAudioFile`, writes CAF, closes it explicitly | PR 1 |
 | Export | converter loop drains until `endOfStream`; output duration checked against the capture | PR 1 |
 | Diagnostics | decoded OSStatus four-char codes, **Copy diagnostics** report | PR 1 |
-| Auto-record, "All system audio" | arm on sound above −60 dBFS, stop after 2 s of silence | planned (PR 3) |
+| Auto-record ("Wait for sound", the default mode) | `AutoRecord/AutoRecordMachine` (pure, idle/armed/recording/closing): a take opens on the first buffer with RMS above −60 dBFS and starts with a 0.5 s pre-roll; RMS at or below the threshold for 2 s (configurable) closes it, keeping a 0.5 s tail, then re-arms. Stop disarms. Manual mode writes from the first buffer. | PR 3 |
+| "All system audio" source | `AudioProcess.allSystemAudio` → `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object | PR 3 |
 | Library + player, level meter, output folder `~/Music/AudioCap`, Quality panel | | planned (PR 4) |
 | Bilingual UI (String Catalog), ≥ 16 pt | | planned (PR 5) |
 | Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | | planned (PR 6) |
@@ -47,6 +48,7 @@ When a planned item lands, move it to "shipped" here in the same PR.
 - **The IO block (the CoreAudio IO queue) is real-time.** It may only copy the incoming `AudioBufferList` into storage that was allocated before `AudioDeviceStart`, and signal the writer. No allocation (no `AVAudioPCMBuffer` creation, no Swift arrays, no string formatting), no locks, no file or network I/O, no `DispatchQueue.sync`, no logging, no main-actor hops.
 - **Stop order:** `AudioDeviceStop` → drain the hand-off buffer → `close()` the file on the writer queue → check frame count vs header → only then convert. Destroy the IOProc, aggregate device and tap afterwards.
 - UI state is `@MainActor`; the writer posts progress and errors back to the main actor, never the IO block.
+- Auto-record logic lives in `AutoRecordMachine` (pure; tests in `AutoRecordMachineTests`), not in `ProcessTapRecorder`. Its rings are allocated with the machine on the main actor before the format reaches the I/O path; `AudioRingBuffer.append` never allocates.
 
 ## Commands
 

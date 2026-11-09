@@ -228,6 +228,8 @@ final class ProcessTapRecorder {
                 if io.take != nil { endTake() }
                 candidate.start()
                 io.machine = candidate
+                let phase = candidate.phase
+                meter.withLock { $0.phase = phase }
             }
         }
         if previous != format { captureFormat = format }
