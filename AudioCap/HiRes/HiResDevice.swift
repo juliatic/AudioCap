@@ -78,18 +78,3 @@ final class CoreAudioOutputSystem: AudioOutputSystem {
         return id
     }
 }
-
-extension AudioDeviceID {
-    /// Sets the nominal rate and waits (bounded, 2 s) until the device reports it: devices apply it asynchronously.
-    func setNominalSampleRate(_ rate: Double, name: String) throws {
-        if (try? readNominalSampleRate()) == rate { return }
-        var value = Float64(rate)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-        try checkStatus(AudioObjectSetPropertyData(self, &address, 0, nil, UInt32(MemoryLayout<Float64>.size), &value), "Setting \(name) to \(rate) Hz")
-        for _ in 0..<40 {
-            if (try? readNominalSampleRate()) == rate { return }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        throw "\(name) did not switch to \(HiResDevice.rateString(rate))."
-    }
-}

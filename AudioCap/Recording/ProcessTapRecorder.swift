@@ -341,7 +341,9 @@ final class ProcessTapRecorder {
         let action = silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
                                          sourceIsPlaying: wasArmed && (tap?.isSourceOutputting ?? false), sourceName: process.name)
         if silenceWarning != silenceGuard.warning { silenceWarning = silenceGuard.warning }
-        if action == .reconnect, let tap {
+        if action == .reconnect, UserDefaults.standard.bool(forKey: "DigitalSilenceGuardReconnectDisabled") {
+            logger.notice("Silence guard reconnect skipped (DigitalSilenceGuardReconnectDisabled)")
+        } else if action == .reconnect, let tap {
             logger.warning("No signal for \(silentSeconds, privacy: .public) s since the capture started while the source is playing; recreating the tap")
             tap.recreateTap(reason: "no signal since the capture started")
         }

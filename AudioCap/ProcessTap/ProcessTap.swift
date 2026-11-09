@@ -258,13 +258,11 @@ final class ProcessTap {
                 var format = try CaptureFormat(validating: asbd, fallbackSampleRate: aggregateSampleRate)
                 format.firstBufferIndex = tapOffset
                 format.bufferCount = streamFormats.count
-                // The I/O cycle runs on the aggregate's clock, so buffers carry frames at its nominal rate even when
-                // the tap's own format still reports the process's rate (e.g. 48 kHz tap, 96 kHz Hi-Res aggregate).
                 var source = source
-                if let aggregateSampleRate, aggregateSampleRate.isFinite, aggregateSampleRate > 0,
-                   format.sampleRate != aggregateSampleRate {
-                    logger.warning("\(source, privacy: .public) says \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(aggregateSampleRate, privacy: .public) Hz; using the aggregate's rate")
-                    format.sampleRate = aggregateSampleRate
+                let delivered = CaptureFormat.deliveredRate(streamRate: format.sampleRate, aggregateRate: aggregateSampleRate)
+                if delivered.overridden {
+                    logger.warning("\(source, privacy: .public) says \(format.sampleRate, privacy: .public) Hz but the aggregate runs at \(delivered.rate, privacy: .public) Hz; using the aggregate's rate")
+                    format.sampleRate = delivered.rate
                     source += ", rate from the aggregate's nominal rate"
                 }
                 let totalChannels = streamFormats.reduce(0) { $0 + Int($1.mChannelsPerFrame) }
@@ -337,13 +335,14 @@ final class ProcessTap {
         try checkStatus(AudioHardwareCreateAggregateDevice(description as CFDictionary, &deviceID), "Creating the aggregate device")
         aggregateDeviceID = deviceID
         aggregateSampleRate = try? deviceID.readNominalSampleRate()
-        // Without sub-devices the aggregate runs at the tap's rate. In Hi-Res mode it must run at the Hi-Res rate.
-        if output.uid == HiResDevice.uid, let rate = output.nominalSampleRate, aggregateSampleRate != rate {
+        // With no sub-devices the aggregate runs at the tap's rate; run it at the clock device's rate instead.
+        // Every rebuild and tap recreation goes through here, so a reconnect re-applies it.
+        if let rate = output.nominalSampleRate, rate > 0, aggregateSampleRate != rate {
             do {
                 try deviceID.setNominalSampleRate(rate, name: "The tap aggregate")
                 aggregateSampleRate = rate
             } catch {
-                logger.warning("Could not run the aggregate at the Hi-Res rate: \(error.audioCapDescription, privacy: .public)")
+                logger.warning("Could not run the aggregate at \(rate, privacy: .public) Hz: \(error.audioCapDescription, privacy: .public)")
             }
         }
 
