@@ -108,10 +108,12 @@ struct LibraryRow: View {
 
     private var details: String {
         var parts = [entry.sourceName,
-                     entry.startedAt.formatted(date: .abbreviated, time: .shortened),
-                     PlayerView.clock(entry.duration),
-                     QualityPanel.formatName(entry.outputFormat),
-                     "\(CaptureFormat.rateString(entry.fileSampleRate)) / \(QualityPanel.bitDepth(entry.outputFormat))"]
+                     entry.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if entry.status != .recording {
+            parts.append(PlayerView.clock(entry.duration))
+        }
+        parts += [QualityPanel.formatName(entry.outputFormat),
+                  "\(CaptureFormat.rateString(entry.fileSampleRate)) / \(QualityPanel.bitDepth(entry.outputFormat))"]
         if let analysis = entry.analysis {
             parts.append(String(localized: "Peak \(LevelMeterView.dbText(analysis.peakDb))"))
         }

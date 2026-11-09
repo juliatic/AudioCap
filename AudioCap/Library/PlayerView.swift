@@ -121,7 +121,7 @@ struct PlayerView: View {
                 .keyboardShortcut(.space, modifiers: [])
                 .disabled(model.errorMessage != nil)
 
-                Text("\(Self.clock(model.currentTime)) / \(Self.clock(model.playerDuration))")
+                Text(verbatim: "\(Self.clock(model.currentTime)) / \(Self.clock(model.playerDuration))")
                     .monospacedDigit()
                 Spacer()
             }
@@ -194,7 +194,7 @@ struct WaveformView: View {
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement()
         .accessibilityLabel(Text("Waveform"))
-        .accessibilityValue(Text("\(Int(progress * 100))%"))
+        .accessibilityValue(Text(progress.formatted(.percent.precision(.fractionLength(0)))))
         .accessibilityAdjustableAction { direction in
             onScrub(progress + (direction == .increment ? 0.05 : -0.05))
         }
