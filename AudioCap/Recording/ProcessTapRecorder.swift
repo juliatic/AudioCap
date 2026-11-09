@@ -95,6 +95,8 @@ final class ProcessTapRecorder {
 
     private struct IOState {
         var pipeline: CapturePipeline?
+        /// Hi-Res monitor ring that receives a copy of the captured audio.
+        var monitorRing: MonitorRingBuffer?
         /// Buffers between `.willReconfigure` and the next event are not valid.
         var isGated = false
     }
@@ -140,6 +142,7 @@ final class ProcessTapRecorder {
                                   thresholdDb: settings.silenceThresholdDb, minSilenceDuration: settings.minSilenceDuration,
                                   autoRecord: autoRecordSettings.configuration)
         mode = autoRecordSettings.mode
+        HiResController.shared.begin(for: tap)
         do {
             let format = try tap.start(on: ioQueue, ioBlock: { [weak self] _, inputData, inputTime, _, _ in
                 self?.handleInput(inputData, time: inputTime)
@@ -154,6 +157,8 @@ final class ProcessTapRecorder {
             }
         } catch {
             session = nil
+            ioQueue.sync { io.monitorRing = nil }
+            HiResController.shared.end()
             lastError = error.audioCapDescription
             logger.error("Start failed: \(error.audioCapDescription, privacy: .public)")
             throw error
@@ -170,6 +175,8 @@ final class ProcessTapRecorder {
         tap?.stop()
         endPipeline()
         session = nil
+        ioQueue.sync { io.monitorRing = nil }
+        HiResController.shared.end()
         status = .idle
         stopMeterTimer()
     }
@@ -230,6 +237,9 @@ final class ProcessTapRecorder {
         }
         captureFormat = format
         autoRecordPhase = pipeline.phase
+        HiResController.shared.formatChanged(format)
+        let monitorRing = HiResController.shared.activeMonitor?.ringBuffer
+        ioQueue.sync { io.monitorRing = monitorRing }
     }
 
     /// Switches between "Wait for sound" and manual. Applies to the running session at once.
@@ -275,6 +285,7 @@ final class ProcessTapRecorder {
             return
         }
         pipeline.process(inputData, time: time)
+        io.monitorRing?.write(inputData, format: pipeline.format)
     }
 
     // MARK: - Export (exportQueue)
@@ -413,6 +424,8 @@ final class ProcessTapRecorder {
             lines.append("Aggregate nominal rate: \(tap.aggregateSampleRate.map { "\($0) Hz" } ?? "unavailable")")
             if let error = tap.lastFormatValidationError { lines.append("Format validation: \(error)") }
             if let error = tap.errorMessage { lines.append("Tap error: \(error)") }
+            lines.append(contentsOf: HiResController.shared.diagnosticsLines)
+            lines.append(contentsOf: tap.ioHistory.map { "I/O history: \($0)" })
         }
         lines.append("Capture format: \(captureFormat?.description ?? "none")")
         lines.append("I/O cycles with no pipeline attached: \(unattachedCycles.value.load(ordering: .relaxed))")

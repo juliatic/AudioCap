@@ -52,6 +52,8 @@ struct RecordingView: View {
                 LabeledContent("Capture format", value: format.displayDescription)
             }
 
+            HiResStatusView()
+
             if recorder.status == .waitingForSource {
                 Text("Waiting for \(recorder.process.name) to start again…")
                     .secondaryTextStyle()

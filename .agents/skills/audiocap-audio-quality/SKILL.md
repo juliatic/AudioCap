@@ -43,6 +43,16 @@ In the app: the **Quality** panel shows the same checks (green "bit-perfect path
 
 Checked on a build machine with synthetic files: an exactly delayed copy gives `-inf` with both ffmpeg and sox; a 96 → 48 → 96 kHz round trip gives about −23 dB peak.
 
+## Hi-Res mode null test and duration test
+Hi-Res mode records at the `AudioCap Hi-Res` device's rate whatever the speakers support. Check it like this (driver installed with `./start.sh --install-driver`):
+1. Make a 96 kHz reference: `timeout 60 ffmpeg -v error -y -f lavfi -i "anoisesrc=d=10:c=pink:r=96000:a=0.5" -ac 2 -c:a pcm_s24le ref96.wav`.
+2. In AudioCap Settings keep Hi-Res on and set "Rate for other apps" to 96 kHz (for Music, the track's rate is used instead).
+3. Start recording the source app first, then play `ref96.wav` in it (Music: add the file and play). The app must follow the system output, which is now `AudioCap Hi-Res`; you keep hearing it on your real device through the monitor.
+4. Check the recording line in AudioCap: `Hi-Res: 96 kHz …` and capture format `96 kHz · 2 ch · Float32`. In Audio MIDI Setup the system output is `AudioCap Hi-Res` at 96 kHz while recording, and back on your device after Stop.
+5. Run the null test above on `rec.wav` vs `ref96.wav`: expect `-inf` (the Hi-Res path does not resample). With the fixed rate at 96 kHz, a 44.1/48 kHz source is upsampled by macOS: transparent in practice but not bit-identical, so it will not null against a 44.1/48 kHz reference.
+6. Duration test: `ffprobe` `sample_rate` must be `96000`, `duration_ts` must equal the decoded frames (below), and the decoded frames / 96,000 must match the recorded time shown by AudioCap (and 960,000 frames for the 10 s reference after aligning).
+7. Repeat once at 192 kHz (fixed rate) and once with Music at a 44.1 kHz track (rate follows the track).
+
 ## Duration check (header vs decoded)
 Players trust the header. A file is healthy only when the header frame count equals the number of frames that actually decode.
 ```

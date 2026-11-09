@@ -24,7 +24,7 @@ Previsto (los detalles están en el plan):
 - **Nuevo motor de grabación** (PR 1): captura sin pérdida en CAF, FLAC de 24 bits, ALAC, WAV Float32 y AAC a 256 kbps; comprobación de duración en cada archivo; códigos de error descifrados y un botón **Copiar diagnóstico**.
 - **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con medio segundo previo) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
 - **Biblioteca y reproductor** (PR 4): cada toma con su estado (grabando, convirtiendo, lista, con error), un reproductor con forma de onda, un medidor de nivel, un panel de **Calidad** y la carpeta de destino `~/Music/AudioCap`.
-- **Modo Hi-Res** (PR 6): graba a la frecuencia completa del original aunque escuches por Bluetooth o por los altavoces de la pantalla.
+- **Modo Hi-Res** (PR 6): graba a la frecuencia completa del original (hasta 192 kHz) aunque escuches por Bluetooth o por los altavoces de la pantalla. `./start.sh` ofrece instalar una vez el dispositivo `AudioCap Hi-Res` (o ejecuta `./start.sh --install-driver`); se desactiva en AudioCap > Ajustes.
 
 ## Requisitos
 
@@ -87,7 +87,7 @@ La interfaz sigue el idioma de macOS: en español si el Mac está en español y 
 En pocas palabras: sin pérdida, pero idéntica bit a bit solo cuando coinciden las frecuencias de muestreo.
 
 - **Profundidad de bits:** el tap entrega coma flotante de 32 bits, que representa exactamente el audio de 16 y 24 bits. El WAV conserva esos datos; FLAC y ALAC (nuevo motor) guardan 24 bits.
-- **Frecuencia de muestreo:** un tap graba a la frecuencia a la que suena la app de origen, y la app suena a la frecuencia de tu **dispositivo de salida**. Si una pista de 96 kHz suena por unos auriculares Bluetooth o una pantalla a 48 kHz, se remuestrea antes de llegar a AudioCap. Para una copia idéntica, pon el dispositivo de salida a la frecuencia del original (Configuración de Audio MIDI). El modo Hi-Res (previsto, PR 6) elimina esta limitación: envía la reproducción a un dispositivo virtual y tú sigues escuchando por tus altavoces.
+- **Frecuencia de muestreo:** un tap graba a la frecuencia a la que suena la app de origen, y la app suena a la frecuencia de tu **dispositivo de salida**. Si una pista de 96 kHz suena por unos auriculares Bluetooth o una pantalla a 48 kHz, se remuestrea antes de llegar a AudioCap. Para una copia idéntica, pon el dispositivo de salida a la frecuencia del original (Configuración de Audio MIDI). El modo Hi-Res elimina esta limitación: mientras grabas, la reproducción va al dispositivo silencioso `AudioCap Hi-Res` a una frecuencia alta (la de la pista de Música o 96 kHz por defecto) y AudioCap reproduce una copia en tus altavoces o auriculares. Al detener vuelve tu salida anterior.
 - **Canales:** el sonido envolvente y Atmos se mezclan a estéreo.
 - **Ajustes de la app de origen:** un volumen de la app por debajo del 100 %, el ecualizador, Sound Check y el audio espacial modifican el sonido antes del tap.
 - **AAC/M4A comprime con pérdida.** Para conservar el original usa WAV, FLAC o ALAC.

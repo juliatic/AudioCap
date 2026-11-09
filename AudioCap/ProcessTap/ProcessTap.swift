@@ -60,6 +60,8 @@ final class ProcessTap {
     @ObservationIgnored private(set) var lastFormatValidationError: String?
     /// One line per input stream of the aggregate device, in buffer-list order.
     @ObservationIgnored private(set) var aggregateInputStreams: [String] = []
+    /// Recent aggregate/tap/I/O events with their rates and buffer sizes, for the diagnostics report.
+    @ObservationIgnored private(set) var ioHistory: [String] = []
 
     // MARK: CoreAudio objects
 
@@ -168,8 +170,11 @@ final class ProcessTap {
         try checkStatus(AudioDeviceCreateIOProcIDWithBlock(&deviceProcID, aggregateDeviceID, ioQueue, ioBlock), "Creating the device I/O proc")
         do {
             if let provisional = try? readCaptureFormat() { eventHandler?(.willStart(provisional)) }
+            configureBufferSize()
             try checkStatus(AudioDeviceStart(aggregateDeviceID, deviceProcID), "Starting the aggregate device")
             let format = try readCaptureFormat()
+            let frames = (try? aggregateDeviceID.read(kAudioDevicePropertyBufferFrameSize, defaultValue: UInt32(0))) ?? 0
+            noteIO("I/O started: \(format.description), buffer \(frames) frames, aggregate nominal \(aggregateSampleRate.map { "\($0)" } ?? "?") Hz")
             captureFormat = format
             isRunning = true
             logger.info("Capture format: \(format.description, privacy: .public) [\(format.sourceDescription.diagnosticDescription, privacy: .public)]")
@@ -179,6 +184,30 @@ final class ProcessTap {
             errorMessage = error.audioCapDescription
             throw error
         }
+    }
+
+    /// At 176.4 kHz and above the default I/O buffer is short; a larger one avoids missed I/O cycles.
+    /// `CaptureBufferFramesHighRate` in the defaults overrides the size (0 leaves the device's choice).
+    private func configureBufferSize() {
+        guard let rate = aggregateSampleRate, rate >= 176_400 else { return }
+        let stored = UserDefaults.standard.object(forKey: "CaptureBufferFramesHighRate") as? Int
+        let wanted = stored ?? 2048
+        guard wanted > 0 else { return }
+        let range = (try? aggregateDeviceID.read(kAudioDevicePropertyBufferFrameSizeRange, defaultValue: AudioValueRange()))
+        var frames = UInt32(wanted)
+        if let range, range.mMaximum > 0 {
+            frames = UInt32(min(max(Double(wanted), range.mMinimum), range.mMaximum))
+        }
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyBufferFrameSize, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        let err = AudioObjectSetPropertyData(aggregateDeviceID, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &frames)
+        noteIO("Buffer size request \(frames) frames at \(rate) Hz: \(err == noErr ? "ok" : AudioStatus.describe(err))")
+    }
+
+    private func noteIO(_ message: String) {
+        let stamp = Date().formatted(.dateTime.hour().minute().second())
+        ioHistory.append("\(stamp) \(message)")
+        if ioHistory.count > 20 { ioHistory.removeFirst(ioHistory.count - 20) }
+        logger.notice("\(message, privacy: .public)")
     }
 
     private func stopIO() {
@@ -324,7 +353,7 @@ final class ProcessTap {
             }
         }
 
-        logger.debug("Created aggregate device #\(deviceID, privacy: .public) on \(output.description, privacy: .public)")
+        noteIO("Aggregate #\(deviceID) created on \(output.description), nominal \(aggregateSampleRate.map { "\($0)" } ?? "?") Hz")
     }
 
     private func destroyAggregateDevice() {
@@ -371,6 +400,23 @@ final class ProcessTap {
         pendingRebuild = nil
     }
 
+    /// Rebuilds the aggregate on the current default output now, if it changed (Hi-Res routing switches the output).
+    @MainActor
+    func syncAggregateWithDefaultOutput() {
+        guard activated else { return activate() }
+        pendingRebuild?.cancel()
+        pendingRebuild = nil
+        rebuildAggregate(reason: "Hi-Res routing changed the output", force: false)
+    }
+
+    /// Rebuilds the aggregate even if the output device is the same, e.g. after its nominal rate changed.
+    @MainActor
+    func forceReconfigure(reason: String) {
+        pendingRebuild?.cancel()
+        pendingRebuild = nil
+        rebuildAggregate(reason: reason, force: true)
+    }
+
     private func scheduleRebuild(reason: String, delay: TimeInterval, force: Bool = false) {
         pendingRebuild?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -415,7 +461,7 @@ final class ProcessTap {
     @MainActor
     func recreateTap(reason: String) {
         guard activated, isSourceAvailable else { return }
-        logger.info("Recreating the tap: \(reason, privacy: .public)")
+        noteIO("Recreating the tap: \(reason)")
         pendingRebuild?.cancel()
         let wasRunning = wantsRunning && deviceProcID != nil
         if wasRunning { eventHandler?(.willReconfigure) }
