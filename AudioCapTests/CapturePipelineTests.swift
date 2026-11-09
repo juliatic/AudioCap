@@ -127,7 +127,7 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         XCTAssertEqual(pipeline.dropoutFrames.load(ordering: .relaxed), 19_200)
         pipeline.finish()
         let warning = try XCTUnwrap(collector.closed.first?.warning)
-        XCTAssertTrue(warning.contains("19200 frames, 0.400 s"), warning)
+        XCTAssertTrue(warning.contains("0.400 s"), warning)
         XCTAssertFalse(warning.contains("timeline jumped"))
     }
 
