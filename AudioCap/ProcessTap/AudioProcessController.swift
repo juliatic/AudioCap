@@ -19,6 +19,21 @@ struct AudioProcess: Identifiable, Hashable, Sendable {
     var objectID: AudioObjectID
 }
 
+extension AudioProcess {
+    /// Identity excludes `audioActive`, so the picker selection still matches its row when the
+    /// source starts or stops output and the list reloads.
+    static func == (lhs: AudioProcess, rhs: AudioProcess) -> Bool {
+        lhs.id == rhs.id && lhs.kind == rhs.kind && lhs.objectID == rhs.objectID
+            && lhs.name == rhs.name && lhs.bundleID == rhs.bundleID && lhs.bundleURL == rhs.bundleURL
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(kind)
+        hasher.combine(objectID)
+    }
+}
+
 struct AudioProcessGroup: Identifiable, Hashable, Sendable {
     var id: String
     var title: String
@@ -67,7 +82,7 @@ final class AudioProcessController {
 
     private(set) var processes = [AudioProcess]() {
         didSet {
-            guard processes != oldValue else { return }
+            guard processes != oldValue || processes.map(\.audioActive) != oldValue.map(\.audioActive) else { return }
 
             processGroups = AudioProcessGroup.groups(with: processes)
         }

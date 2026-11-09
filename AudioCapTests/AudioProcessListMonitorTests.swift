@@ -49,3 +49,17 @@ final class AudioProcessListMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.outputListenerCount(), 0)
     }
 }
+
+final class AudioProcessIdentityTests: XCTestCase {
+    func testOutputStateDoesNotChangeIdentity() {
+        let playing = AudioProcess(id: 42, kind: .process, name: "afplay", audioActive: true, bundleID: nil, bundleURL: nil, objectID: 7)
+        var idle = playing
+        idle.audioActive = false
+        XCTAssertEqual(playing, idle)
+        XCTAssertEqual(playing.hashValue, idle.hashValue)
+
+        var other = playing
+        other.objectID = 8
+        XCTAssertNotEqual(playing, other)
+    }
+}
