@@ -131,7 +131,7 @@ final class ProcessTapRecorder {
             logger.warning("\(#function, privacy: .public) while already recording")
             return
         }
-        guard let tap else { throw "The process tap is not available." }
+        guard let tap else { throw String(localized: "The process tap is not available.") }
         lastError = nil
         silenceGuard.reset()
         silenceWarning = nil
@@ -297,7 +297,7 @@ final class ProcessTapRecorder {
                 take.status = .completed
                 logger.info("Exported \(take.outputURL.lastPathComponent, privacy: .public): \(result.frameCount) frames")
             } catch {
-                take.status = .failed(message: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent).")
+                take.status = .failed(message: String(localized: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent)."))
                 logger.error("Export failed: \(error.audioCapDescription, privacy: .public)")
             }
             DispatchQueue.main.async { self.upsert(take, event: .updated(take)) }

@@ -159,8 +159,8 @@ final class ProcessTap {
     }
 
     private func startIO() throws -> CaptureFormat {
-        guard let ioQueue, let ioBlock else { throw "The capture queue is not configured." }
-        guard aggregateDeviceID.isValid else { throw errorMessage ?? "The aggregate device is not available." }
+        guard let ioQueue, let ioBlock else { throw String(localized: "The capture queue is not configured.") }
+        guard aggregateDeviceID.isValid else { throw errorMessage ?? String(localized: "The aggregate device is not available.") }
 
         errorMessage = nil
         logger.debug("Starting I/O")
@@ -256,7 +256,7 @@ final class ProcessTap {
             }
         }
         lastFormatValidationError = firstError?.audioCapDescription
-        throw firstError ?? "The aggregate device has no readable input stream format."
+        throw firstError ?? String(localized: "The aggregate device has no readable input stream format.")
     }
 
     // MARK: - Setup

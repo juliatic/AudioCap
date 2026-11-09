@@ -43,6 +43,6 @@ struct DigitalSilenceGuard: Equatable {
         }
         guard state == .armed, silentSeconds >= seconds, sourceIsPlaying else { return }
         state = .warned
-        warning = "\(sourceName) is playing but AudioCap has only received digital silence so far. This is expected during a silent intro. If you hear audio, check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again."
+        warning = String(localized: "\(sourceName) is playing but AudioCap has only received digital silence so far. This is expected during a silent intro. If you hear audio, check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again.")
     }
 }

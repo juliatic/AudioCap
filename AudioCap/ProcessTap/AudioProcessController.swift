@@ -160,7 +160,7 @@ final class AudioProcessController {
 
 private extension AudioProcess {
     init(app: NSRunningApplication, objectID: AudioObjectID) {
-        let name = app.localizedName ?? app.bundleURL?.deletingPathExtension().lastPathComponent ?? app.bundleIdentifier?.components(separatedBy: ".").last ?? "Unknown \(app.processIdentifier)"
+        let name = app.localizedName ?? app.bundleURL?.deletingPathExtension().lastPathComponent ?? app.bundleIdentifier?.components(separatedBy: ".").last ?? String(localized: "Unknown (\(String(app.processIdentifier)))")
 
         self.init(
             id: app.processIdentifier,
@@ -193,7 +193,7 @@ private extension AudioProcess {
         } else if let id = bundleID?.lastReverseDNSComponent {
             (id, nil)
         } else {
-            ("Unknown (\(pid))", nil)
+            (String(localized: "Unknown (\(String(pid)))"), nil)
         }
 
         self.init(
@@ -231,9 +231,9 @@ extension AudioProcessGroup {
 extension AudioProcess.Kind {
     var groupTitle: String {
         switch self {
-        case .process: "Processes"
-        case .app: "Apps"
-        case .system: "System"
+        case .process: String(localized: "Processes")
+        case .app: String(localized: "Apps")
+        case .system: String(localized: "System")
         }
     }
 }

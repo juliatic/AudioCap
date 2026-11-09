@@ -20,10 +20,10 @@ final class RecordingSettings {
 
         var displayName: String {
             switch self {
-            case .wav: "WAV (Float32, raw)"
-            case .flac: "FLAC (24-bit)"
-            case .alac: "ALAC (24-bit)"
-            case .aac: "AAC 256 kbps (lossy)"
+            case .wav: String(localized: "WAV (Float32, raw)")
+            case .flac: String(localized: "FLAC (24-bit)")
+            case .alac: String(localized: "ALAC (24-bit)")
+            case .aac: String(localized: "AAC 256 kbps (lossy)")
             }
         }
 

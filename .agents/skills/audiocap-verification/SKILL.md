@@ -22,6 +22,8 @@ Every command below has an explicit timeout. On macOS, `timeout` comes from GNU 
 | Library, player, quality (PR 4) | launch, record a take, then check the library row, play it, scrub, read **Header / Decoded / Captured** | row reaches "Done" with "Lengths match"; `~/Library/Containers/io.github.juliatic.AudioCap/Data/Library/Application Support/AudioCap/library.json` lists the take |
 | One test | add `-only-testing:AudioCapTests/<Class>/<method>` | |
 | Fixture durations | see `audiocap-audio-quality` | header frames = decoded frames |
+| Catalog complete | after a build, compare the keys in `build/DerivedData/Build/Intermediates.noindex/AudioCap.build/*/AudioCap.build/Objects-normal/*/*.stringsdata` with `AudioCap/Localizable.xcstrings` | no key missing, none stale; `LocalizationTests` green |
+| Spanish UI | `open -n /Applications/AudioCap.app --args -AppleLanguages "(es)"` (`"(en)"` for English) | every label in Spanish, nothing truncated, numbers in Spanish format |
 
 Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact round trip, silence detector, auto-arm state machine). They need no tap and no permission, so they run anywhere.
 
@@ -33,10 +35,12 @@ Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact r
 - The process list refreshes on its own when CoreAudio's process list or a process's output state changes (`AudioProcessListMonitor`), so a freshly started `afplay` appears in the picker within a fraction of a second.
 - Auto-record ("Wait for sound") check: Start with nothing playing (orange "Waiting for sound…", no take), play two 2 s tones about 5 s apart. Expect two completed takes, each about 0.5 s lead + 2 s tone + 0.5 s tail, and the waiting label back after each.
 - Each ad-hoc rebuild installed into `/Applications` (and the bundle-id change) can bring the audio-capture permission prompt back on first launch.
+- Observed on the build VM before the engine stopped adding the output device as an aggregate sub-device: right after `tccutil reset` and a fresh **Allow**, the running app recorded silence (peak 0.0) until relaunched. The engine now warns on a silent take (`silenceWarning`, `take.warning`); if a first take after granting is still silent, record that in the PR.
 - Show the permission prompt again: `tccutil reset AudioCapture <bundle id>` (`codes.rambo.samplecode.AudioCap` upstream, `io.github.juliatic.AudioCap` after the bundle-id change). Starting a recording may also trigger the microphone prompt.
 - App logs: `timeout 30 log show --last 5m --style compact --predicate 'process == "AudioCap"'`.
 - Check the result file with the duration check in `audiocap-audio-quality`; a 4,096-byte WAV with `duration=N/A` is an empty file (header only).
-- Screenshots: `screencapture -x -o -l <windowID> out.png` for a single window.
+- Screenshots: `screencapture -x -o -l <windowID> out.png` for a single window. README screenshots live in `docs/images/en/` and `docs/images/es/` with the same file names; take the Spanish ones with `-AppleLanguages "(es)"`.
+- Keyboard: with *Keyboard navigation* on, Tab must reach every control, Return triggers the default button (Allow, Open System Settings) and ⌘R starts and stops.
 
 ## Only on the owner's Mac
 - The audio-capture permission prompt and the flow after "Allow" on the owner's macOS version.

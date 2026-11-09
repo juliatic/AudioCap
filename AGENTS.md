@@ -41,7 +41,7 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 | Library + player | `RecordingLibrary` follows `takeEvents()`, saves `library.json` in Application Support, reads each file back with `AudioFileInspector` (header, decoded and WAV/CAF payload frames, peak); `PlayerView` plays, scrubs and draws the waveform | PR 4 |
 | Level meter, output folder | `LevelMeterView` (peak, RMS, 1.5 s hold); `OutputFolder`: `~/Music/AudioCap` or a picked folder kept with a security-scoped bookmark | PR 4 |
 | Quality panel | `QualityPathBuilder` → `QualityPath` → `QualityAssessment` (badge, warnings, notes); `QualityPathContributor` is the hook for PR 6; `DeviceRateMatcher` sets the output rate only on request and restores it | PR 4 |
-| Bilingual UI (String Catalog), ≥ 16 pt | | planned (PR 5) |
+| Bilingual UI (String Catalog), ≥ 16 pt, contrast ≥ 4.5:1, keyboard and VoiceOver | `Localizable.xcstrings` + `InfoPlist.xcstrings` (en/es, follows the system language); `Accessibility/AppStyle.swift` for fonts and colours | PR 5 |
 | Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | | planned (PR 6) |
 
 When a planned item lands, move it to "shipped" here in the same PR.
@@ -74,7 +74,8 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 ## Rules
 
 - **Bilingual:** every user-facing string goes in the String Catalog with English and natural Spanish (not a word-for-word calque). `README.md` and `README.es.md` keep the same headings; the same goes for `docs/*.md` / `docs/*.es.md` pairs.
-- **Readable UI:** body text is at least 16 pt.
+- **Localizable code:** UI text is a `LocalizedStringKey` literal (`Text("…")`, `Button(readable: "…")`) or `String(localized: "…")`; interpolations and ternaries go through `String(localized:)` with each branch a separate literal, never `Text(verbatim:)` or a plain `String` passed to `Text`. Interpolate integers that are not quantities (PIDs, OSStatus) as `String(n)` so they do not get thousands separators. `LocalizationTests` fails when a catalog entry lacks Spanish or its `%` specifiers differ; after a build, every key in the generated `*.stringsdata` must be in the catalog.
+- **Readable UI:** body text is at least 16 pt (`AppStyle.body`). On macOS, `.font` on a bordered `Button` or a menu `Picker` is ignored: put it on the label `Text` (`Button(readable:)`, `Text(…).font(AppStyle.body)` in picker items). Secondary, warning and error text use `AppStyle.secondaryText` / `AppStyle.warningText` / `AppStyle.errorText` (`.secondaryTextStyle()`, `.warningTextStyle()`, `.errorTextStyle()`; never `.orange`/`.red`/`.secondary`) (≥ 4.5:1 in light and dark, checked by `AppStyleTests`). Every control is a real control (no `onTapGesture`), has a label, and is disabled while a recording, conversion or permission request is running.
 - **One launcher:** `./start.sh` is the only entry point. Anything a user needs (build, tests, driver install) goes behind one of its options, never into a list of commands in a reply. macOS only: there is no `start.bat`.
 - **Never claim untested behaviour.** Say what you ran and what you did not. Recording from a real app, the permission prompt and behaviour on the owner's macOS can only be checked on the owner's Mac.
 - **Every PR body** separates "verified on a macOS build machine" from "only checkable on the owner's Mac" and ends with short numbered **On-device check** steps.

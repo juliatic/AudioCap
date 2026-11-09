@@ -43,6 +43,14 @@ struct CaptureFormat: Equatable, Sendable, CustomStringConvertible {
         "\(Self.rateString(sampleRate)) · \(channelCount) ch · \(sampleType.rawValue) · \(isInterleaved ? "interleaved" : "non-interleaved")"
     }
 
+    /// `description` in the app's language, for the UI. Logs and diagnostics keep the English `description`.
+    var displayDescription: String {
+        let rate = Self.rateString(sampleRate)
+        return isInterleaved
+            ? String(localized: "\(rate) · \(channelCount) ch · \(sampleType.rawValue) · interleaved")
+            : String(localized: "\(rate) · \(channelCount) ch · \(sampleType.rawValue) · non-interleaved")
+    }
+
     /// The canonical format every capture file is written in: Float32, deinterleaved, same rate and channels.
     var writerFormat: AVAudioFormat {
         Self.canonicalFormat(sampleRate: sampleRate, channelCount: channelCount)
@@ -80,11 +88,13 @@ struct CaptureFormat: Equatable, Sendable, CustomStringConvertible {
 
         var errorDescription: String? {
             switch self {
-            case .notLinearPCM(let id): "The capture stream is not linear PCM (format '\(id)')."
-            case .invalidSampleRate(let rate): "The capture stream reports an invalid sample rate (\(rate) Hz)."
-            case .invalidChannelCount(let count): "The capture stream reports \(count) channels."
-            case .unsupportedSampleType(let bits, let isFloat): "Unsupported capture sample type: \(bits)-bit \(isFloat ? "float" : "integer")."
-            case .inconsistentLayout(let detail): "The capture stream layout is inconsistent: \(detail)."
+            case .notLinearPCM(let id): String(localized: "The capture stream is not linear PCM (format '\(id)').")
+            case .invalidSampleRate(let rate): String(localized: "The capture stream reports an invalid sample rate (\(rate) Hz).")
+            case .invalidChannelCount(let count): String(localized: "The capture stream reports \(Int(count)) channels.")
+            case .unsupportedSampleType(let bits, let isFloat):
+                isFloat ? String(localized: "Unsupported capture sample type: \(Int(bits))-bit float.")
+                    : String(localized: "Unsupported capture sample type: \(Int(bits))-bit integer.")
+            case .inconsistentLayout(let detail): String(localized: "The capture stream layout is inconsistent: \(detail).")
             }
         }
     }

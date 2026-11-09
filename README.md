@@ -14,6 +14,7 @@ Available today:
 - Pick any app that is playing audio and record only that app.
 - Save as WAV (32-bit float), M4A (AAC) or FLAC.
 - Optional split into separate files on silence, with a threshold (dB) and a minimum silence length (seconds).
+- Spanish and English interface that follows the macOS language, text of at least 16 pt, high-contrast colours, VoiceOver labels and keyboard control (**⌘R** starts and stops).
 
 Known problems in the current build (fixed by the new recording engine, PR 1):
 - On recent macOS versions, starting a WAV recording can fail with error `1718449215` (`'fmt?'`), or the file can stay empty.
@@ -23,7 +24,6 @@ Planned (see the plan for details):
 - **New recording engine** (PR 1): lossless CAF capture, FLAC 24-bit, ALAC, WAV Float32, AAC 256 kbps; length check on every file; decoded error codes with a **Copy diagnostics** button.
 - **Auto-record** (PR 3, "Wait for sound", the default): click **Start** to arm; a take starts when the source makes sound (with half a second of pre-roll) and ends after 2 s of silence (configurable), then it waits again. **Manual** mode records from Start to Stop. Plus an "All system audio" source (everything except AudioCap).
 - **Library and player** (PR 4): every take with its status (recording, converting, done, failed), a player with waveform, a level meter, a **Quality** panel and the output folder `~/Music/AudioCap`.
-- **Spanish and English interface** (PR 5), with text of at least 16 pt.
 - **Hi-Res mode** (PR 6): record at the source's full rate even when you listen on Bluetooth or display speakers.
 
 ## Requirements
@@ -80,7 +80,7 @@ DEVELOPMENT_TEAM = XXXXXXXXXX
 
 Recordings are currently saved in the app's container: `~/Library/Containers/codes.rambo.samplecode.AudioCap/Data/Library/Application Support/AudioCap` (see [Troubleshooting](docs/troubleshooting.md#where-recordings-are-saved)).
 
-These screenshots show the current interface; they will be replaced when the interface is translated (PR 5).
+The interface follows the macOS language: Spanish on a Mac set to Spanish, English otherwise. To try the other language, run `open -n /Applications/AudioCap.app --args -AppleLanguages "(es)"`. Press **⌘R** to start or stop a recording, **Return** for the highlighted button and **Tab** to move between controls (with *Keyboard navigation* on in System Settings > Keyboard).
 
 ## Recording quality
 

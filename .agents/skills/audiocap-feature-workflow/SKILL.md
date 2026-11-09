@@ -41,7 +41,7 @@ Never list something under "verified" that you did not run. If a run failed, say
 
 ## 5. Owner preferences
 - Spanish and English for UI and docs; Spanish must read naturally, not as a calque. Same headings in both READMEs.
-- Body text ≥ 16 pt in the UI.
+- Body text ≥ 16 pt in the UI (`AppStyle`), contrast ≥ 4.5:1, every control reachable by keyboard and labelled for VoiceOver, controls locked while a recording, conversion or request runs. New UI strings go in `Localizable.xcstrings` (English + Spanish) in the same PR; add only your own keys to keep merges small.
 - One launcher (`./start.sh`), zero manual steps.
 - Real screenshots and real SVG diagrams; no placeholders, no ASCII art, no Mermaid.
 - Maximum quality by default; be honest about where the signal is resampled or changed.
