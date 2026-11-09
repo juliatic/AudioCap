@@ -16,9 +16,31 @@ extension AudioObjectID {
         try read(kAudioDevicePropertyNominalSampleRate, defaultValue: Float64(0))
     }
 
+    /// Sets `kAudioDevicePropertyNominalSampleRate` and waits (at most 2 s) until the device reports it,
+    /// because devices apply it asynchronously.
+    func setNominalSampleRate(_ rate: Double, name: String) throws {
+        if (try? readNominalSampleRate()) == rate { return }
+        var value = Float64(rate)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        try checkStatus(AudioObjectSetPropertyData(self, &address, 0, nil, UInt32(MemoryLayout<Float64>.size), &value), "Setting \(name) to \(rate) Hz")
+        for _ in 0..<40 {
+            if (try? readNominalSampleRate()) == rate { return }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        throw "\(name) did not switch to \(CaptureFormat.rateString(rate))."
+    }
+
     /// `kAudioProcessPropertyPID`.
     func readProcessPID() -> pid_t? {
         (try? read(kAudioProcessPropertyPID, defaultValue: pid_t(-1))).flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// The executable path of a process object, used to recognize a relaunch of a process that has no bundle ID.
+    func readProcessExecutablePath() -> String? {
+        guard let pid = readProcessPID() else { return nil }
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(cString: buffer) : nil
     }
 
     /// `kAudioProcessPropertyIsRunningOutput`: the process is currently playing audio.

@@ -350,7 +350,7 @@ final class CapturePipeline: @unchecked Sendable {
         }
         let reconnected = reconnects.exchange(0, ordering: .relaxed)
         if reconnected > 0 {
-            warnings.append("The capture was reconnected \(reconnected) time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take.")
+            warnings.append("The capture was reconnected \(reconnected) time(s) (output device change, source relaunch or wake); audio played during a reconnect is not in the take.")
         }
         let jumps = discontinuities.exchange(0, ordering: .relaxed)
         let skipped = skippedFrames.exchange(0, ordering: .relaxed)

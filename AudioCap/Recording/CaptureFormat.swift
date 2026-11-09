@@ -57,6 +57,16 @@ struct CaptureFormat: Equatable, Sendable, CustomStringConvertible {
         return AVAudioFormat(standardFormatWithSampleRate: sampleRate, channelLayout: layout)
     }
 
+    /// The rate the I/O cycle really delivers. The cycle runs on the aggregate's clock, so when a stream or tap
+    /// format reports a different rate (the process's rate, e.g. 48 kHz on a 96 kHz device), the aggregate's
+    /// nominal rate wins. Labelling frames with the wrong rate changes the file's duration.
+    static func deliveredRate(streamRate: Double, aggregateRate: Double?) -> (rate: Double, overridden: Bool) {
+        guard let aggregateRate, aggregateRate.isFinite, aggregateRate > 0, aggregateRate != streamRate else {
+            return (streamRate, false)
+        }
+        return (aggregateRate, true)
+    }
+
     static func rateString(_ rate: Double) -> String {
         rate.truncatingRemainder(dividingBy: 1000) == 0 ? "\(Int(rate / 1000)) kHz" : String(format: "%.1f kHz", rate / 1000)
     }

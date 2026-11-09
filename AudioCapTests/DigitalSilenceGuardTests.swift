@@ -2,53 +2,57 @@ import XCTest
 @testable import AudioCap
 
 final class DigitalSilenceGuardTests: XCTestCase {
-    private let t0 = Date(timeIntervalSinceReferenceDate: 0)
-
-    func testAllZerosTriggersExactlyOnceThenWarns() {
+    func testAllZerosWarnsExactlyOnceAndNeverReconnects() {
         var guardian = DigitalSilenceGuard(seconds: 2)
-        var reconnects = 0
+        var warnings = 0
+        var previous: String?
         for step in 0...100 {
-            let elapsed = Double(step) * 0.1
-            if guardian.update(silentSeconds: elapsed, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "afplay",
-                               now: t0.addingTimeInterval(elapsed)) == .reconnect {
-                reconnects += 1
-            }
+            guardian.update(silentSeconds: Double(step) * 0.1, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "afplay")
+            if guardian.warning != previous, guardian.warning != nil { warnings += 1 }
+            previous = guardian.warning
         }
-        XCTAssertEqual(reconnects, 1)
-        XCTAssertEqual(guardian.state, .gaveUp)
+        XCTAssertEqual(warnings, 1)
+        XCTAssertEqual(guardian.state, .warned)
         XCTAssertTrue(guardian.warning?.contains("Screen & System Audio Recording") == true)
     }
 
-    func testZerosThenSignalThenZerosNeverTriggersAfterTheFirstSignal() {
+    func testNoWarningBeforeTheThreshold() {
         var guardian = DigitalSilenceGuard(seconds: 2)
-        XCTAssertEqual(guardian.update(silentSeconds: 1, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x", now: t0), .none)
-        XCTAssertEqual(guardian.update(silentSeconds: 0, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x", now: t0), .none)
+        guardian.update(silentSeconds: 1.9, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x")
+        XCTAssertEqual(guardian.state, .armed)
+        XCTAssertNil(guardian.warning)
+    }
+
+    func testZerosThenSignalThenZerosNeverWarnsAfterTheFirstSignal() {
+        var guardian = DigitalSilenceGuard(seconds: 2)
+        guardian.update(silentSeconds: 1, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x")
+        guardian.update(silentSeconds: 0, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x")
         for step in 0...200 {
-            let elapsed = Double(step) * 0.1
-            XCTAssertEqual(guardian.update(silentSeconds: elapsed, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x",
-                                           now: t0.addingTimeInterval(elapsed)), .none)
+            guardian.update(silentSeconds: Double(step) * 0.1, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x")
+            XCTAssertNil(guardian.warning)
         }
         XCTAssertEqual(guardian.state, .disarmed)
-        XCTAssertNil(guardian.warning)
     }
 
-    func testNoReconnectWhileTheSourceIsNotPlaying() {
+    func testNoWarningWhileTheSourceIsNotPlaying() {
         var guardian = DigitalSilenceGuard(seconds: 2)
-        XCTAssertEqual(guardian.update(silentSeconds: 10, hasSeenSignal: false, sourceIsPlaying: false, sourceName: "x", now: t0), .none)
+        guardian.update(silentSeconds: 10, hasSeenSignal: false, sourceIsPlaying: false, sourceName: "x")
         XCTAssertNil(guardian.warning)
+        XCTAssertEqual(guardian.state, .armed)
     }
 
-    func testSignalAfterReconnectClearsTheWarning() {
+    func testSignalAfterTheWarningClearsIt() {
         var guardian = DigitalSilenceGuard(seconds: 2)
-        XCTAssertEqual(guardian.update(silentSeconds: 2, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x", now: t0), .reconnect)
+        guardian.update(silentSeconds: 2, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x")
         XCTAssertNotNil(guardian.warning)
-        _ = guardian.update(silentSeconds: 0, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x", now: t0)
+        guardian.update(silentSeconds: 0, hasSeenSignal: true, sourceIsPlaying: true, sourceName: "x")
         XCTAssertNil(guardian.warning)
+        XCTAssertEqual(guardian.state, .disarmed)
     }
 
     func testStopClearsTheWarningAndRearms() {
         var guardian = DigitalSilenceGuard(seconds: 2)
-        _ = guardian.update(silentSeconds: 3, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x", now: t0)
+        guardian.update(silentSeconds: 3, hasSeenSignal: false, sourceIsPlaying: true, sourceName: "x")
         XCTAssertNotNil(guardian.warning)
         guardian.reset() // what ProcessTapRecorder.stop()/start() do
         XCTAssertNil(guardian.warning)
