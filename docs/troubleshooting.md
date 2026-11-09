@@ -25,9 +25,7 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 
 ## Permission
 
-AudioCap needs **System Audio Recording** permission. On first use macOS shows "“AudioCap” would like access to record your system audio." Click **Allow**. macOS may also ask for microphone access when you start a recording.
-
-![Microphone prompt when a recording starts](images/en/microphone-prompt.png)
+AudioCap needs **System Audio Recording** permission. On first use macOS shows "“AudioCap” would like access to record your system audio." Click **Allow**.
 
 If you clicked **Don't Allow**, or the prompt never appears:
 
