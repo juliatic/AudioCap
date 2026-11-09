@@ -17,6 +17,16 @@ struct ProcessSelectionView: View {
                 Text("Select…")
                     .tag(Optional<AudioProcess>.none)
 
+                HStack {
+                    Image(nsImage: AudioProcess.allSystemAudio.icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
+
+                    Text("All system audio")
+                }
+                    .tag(Optional<AudioProcess>.some(.allSystemAudio))
+
                 ForEach(processController.processGroups) { group in
                     Section {
                         ForEach(group.processes) { process in

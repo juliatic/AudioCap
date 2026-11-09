@@ -52,13 +52,15 @@ struct RecordingView: View {
                     .foregroundStyle(.secondary)
             }
 
+            AutoRecordControls(recorder: recorder)
+
             // Recording settings
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(isOn: $settings.autoSplitOnSilence) {
                     Text("Auto-split on silence")
                 }
                 .tint(.green)
-                .disabled(recorder.isRecording)
+                .disabled(recorder.isRecording || recorder.mode == .waitForSound)
 
                 HStack(spacing: 8) {
                     LabeledContent("Format") {

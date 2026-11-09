@@ -7,6 +7,8 @@ struct AudioProcess: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable {
         case process
         case app
+        /// Everything the system plays except AudioCap itself.
+        case system
     }
     var id: pid_t
     var kind: Kind
@@ -28,11 +30,23 @@ extension AudioProcess.Kind {
         switch self {
         case .process: NSWorkspace.shared.icon(for: .unixExecutable)
         case .app: NSWorkspace.shared.icon(for: .applicationBundle)
+        case .system: NSImage(systemSymbolName: "hifispeaker.2", accessibilityDescription: nil) ?? NSWorkspace.shared.icon(for: .applicationBundle)
         }
     }
 }
 
 extension AudioProcess {
+    /// The "All system audio" source: a global tap that excludes AudioCap's own output.
+    static let allSystemAudio = AudioProcess(
+        id: -1,
+        kind: .system,
+        name: String(localized: "All system audio"),
+        audioActive: true,
+        bundleID: nil,
+        bundleURL: nil,
+        objectID: .unknown
+    )
+
     var icon: NSImage {
         guard let bundleURL else { return kind.defaultIcon }
         let image = NSWorkspace.shared.icon(forFile: bundleURL.path)
@@ -189,6 +203,7 @@ extension AudioProcess.Kind {
         switch self {
         case .process: "Processes"
         case .app: "Apps"
+        case .system: "System"
         }
     }
 }

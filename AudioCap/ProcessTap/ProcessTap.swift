@@ -252,7 +252,14 @@ final class ProcessTap {
     private func prepare(for objectID: AudioObjectID) throws {
         errorMessage = nil
 
-        let tapDescription = CATapDescription(stereoMixdownOfProcesses: [objectID])
+        let tapDescription: CATapDescription
+        if process.kind == .system {
+            // AudioCap only has a process object once it has used audio; nothing to exclude before that.
+            let ownObject = (try? AudioObjectID.translatePIDToProcessObjectID(pid: ProcessInfo.processInfo.processIdentifier)) ?? .unknown
+            tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: ownObject == .unknown ? [] : [ownObject])
+        } else {
+            tapDescription = CATapDescription(stereoMixdownOfProcesses: [objectID])
+        }
         tapDescription.uuid = UUID()
         tapDescription.muteBehavior = muteWhenRunning ? .mutedWhenTapped : .unmuted
         var tapID: AUAudioObjectID = .unknown
@@ -380,7 +387,7 @@ final class ProcessTap {
 
     @MainActor
     private func processListChanged() {
-        guard activated, let objects = try? AudioObjectID.readProcessList() else { return }
+        guard activated, process.kind != .system, let objects = try? AudioObjectID.readProcessList() else { return }
 
         if isSourceAvailable {
             guard !objects.contains(process.objectID) else { return }
