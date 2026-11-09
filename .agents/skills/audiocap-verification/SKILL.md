@@ -29,7 +29,7 @@ Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact r
 ## Driving the app on a headless build machine
 - A VM without an audio output device makes the tap fail with `'!obj'` (`560947818`). A virtual output (for example BlackHole on a throwaway VM) gives the system a device; do not change audio devices on a machine other projects use.
 - Play a known file with `timeout 30 afplay <file> &` and pick `afplay` in the process list.
-- The process list only refreshes on GUI-app launch/quit (`NSWorkspace.runningApplications`), so a freshly started `afplay` may be missing even after reopening the picker. Open and quit any GUI app (for example Calculator) while `afplay` is playing to refresh it. "All system audio" needs no refresh.
+- The process list refreshes on its own when CoreAudio's process list or a process's output state changes (`AudioProcessListMonitor`), so a freshly started `afplay` appears in the picker within a fraction of a second.
 - Auto-record ("Wait for sound") check: Start with nothing playing (orange "Waiting for sound…", no take), play two 2 s tones about 5 s apart. Expect two completed takes, each about 0.5 s lead + 2 s tone + 0.5 s tail, and the waiting label back after each.
 - Each ad-hoc rebuild installed into `/Applications` (and the bundle-id change) can bring the audio-capture permission prompt back on first launch.
 - Show the permission prompt again: `tccutil reset AudioCapture <bundle id>` (`codes.rambo.samplecode.AudioCap` upstream, `io.github.juliatic.AudioCap` after the bundle-id change). Starting a recording may also trigger the microphone prompt.

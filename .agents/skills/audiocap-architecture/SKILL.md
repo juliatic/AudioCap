@@ -9,6 +9,7 @@ Diagram: [`docs/img/architecture.svg`](../../../docs/img/architecture.svg). Upst
 
 ## Lifecycle (start)
 1. PID → `AudioObjectID` with `kAudioHardwarePropertyTranslatePIDToProcessObject`. "All system audio" (`AudioProcess.allSystemAudio`, kind `.system`) uses `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object instead, and skips the source-quit/relaunch tracking.
+   The source list (`AudioProcessController`) reloads on `NSWorkspace.runningApplications` changes and on `AudioProcessListMonitor` events: `kAudioHardwarePropertyProcessObjectList` on the system object plus `kAudioProcessPropertyIsRunningOutput` on each process. Those listeners run on a private serial queue and are coalesced (150 ms) before one main-actor reload, so audio-only processes such as `afplay` show up.
 2. `CATapDescription(stereoMixdownOfProcesses: [objectID])`, keep its `uuid`; `AudioHardwareCreateProcessTap` → tap ID.
 3. Aggregate description: private (`kAudioAggregateDeviceIsPrivateKey`), tap list `[[kAudioSubTapUIDKey: uuid]]`, main sub-device = the clock device (default output today; `AudioCap Hi-Res` in Hi-Res mode). `AudioHardwareCreateAggregateDevice`.
 4. Preallocate the hand-off storage, then `AudioDeviceCreateIOProcIDWithBlock` and `AudioDeviceStart`.

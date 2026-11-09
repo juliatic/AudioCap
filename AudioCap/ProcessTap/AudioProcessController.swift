@@ -76,18 +76,33 @@ final class AudioProcessController {
     private(set) var processGroups = [AudioProcessGroup]()
 
     private var cancellables = Set<AnyCancellable>()
+    private var runningApplications = [NSRunningApplication]()
+    private var monitor: AudioProcessListMonitor?
 
     func activate() {
         logger.debug(#function)
+
+        guard monitor == nil else { return }
 
         NSWorkspace.shared
             .publisher(for: \.runningApplications, options: [.initial, .new])
             .map { $0.filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) }
             .sink { [weak self] apps in
                 guard let self else { return }
+                self.runningApplications = apps
                 self.reload(apps: apps)
             }
             .store(in: &cancellables)
+
+        // Audio-only processes (afplay, helpers) never appear in runningApplications.
+        let monitor = AudioProcessListMonitor { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.reload(apps: self.runningApplications)
+            }
+        }
+        monitor.start()
+        self.monitor = monitor
     }
 
     fileprivate func reload(apps: [NSRunningApplication]) {
