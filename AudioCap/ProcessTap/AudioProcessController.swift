@@ -7,6 +7,8 @@ struct AudioProcess: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable {
         case process
         case app
+        /// Everything the system plays except AudioCap itself.
+        case system
     }
     var id: pid_t
     var kind: Kind
@@ -15,6 +17,21 @@ struct AudioProcess: Identifiable, Hashable, Sendable {
     var bundleID: String?
     var bundleURL: URL?
     var objectID: AudioObjectID
+}
+
+extension AudioProcess {
+    /// Identity excludes `audioActive`, so the picker selection still matches its row when the
+    /// source starts or stops output and the list reloads.
+    static func == (lhs: AudioProcess, rhs: AudioProcess) -> Bool {
+        lhs.id == rhs.id && lhs.kind == rhs.kind && lhs.objectID == rhs.objectID
+            && lhs.name == rhs.name && lhs.bundleID == rhs.bundleID && lhs.bundleURL == rhs.bundleURL
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(kind)
+        hasher.combine(objectID)
+    }
 }
 
 struct AudioProcessGroup: Identifiable, Hashable, Sendable {
@@ -28,11 +45,23 @@ extension AudioProcess.Kind {
         switch self {
         case .process: NSWorkspace.shared.icon(for: .unixExecutable)
         case .app: NSWorkspace.shared.icon(for: .applicationBundle)
+        case .system: NSImage(systemSymbolName: "hifispeaker.2", accessibilityDescription: nil) ?? NSWorkspace.shared.icon(for: .applicationBundle)
         }
     }
 }
 
 extension AudioProcess {
+    /// The "All system audio" source: a global tap that excludes AudioCap's own output.
+    static let allSystemAudio = AudioProcess(
+        id: -1,
+        kind: .system,
+        name: String(localized: "All system audio"),
+        audioActive: true,
+        bundleID: nil,
+        bundleURL: nil,
+        objectID: .unknown
+    )
+
     var icon: NSImage {
         guard let bundleURL else { return kind.defaultIcon }
         let image = NSWorkspace.shared.icon(forFile: bundleURL.path)
@@ -53,7 +82,7 @@ final class AudioProcessController {
 
     private(set) var processes = [AudioProcess]() {
         didSet {
-            guard processes != oldValue else { return }
+            guard processes != oldValue || processes.map(\.audioActive) != oldValue.map(\.audioActive) else { return }
 
             processGroups = AudioProcessGroup.groups(with: processes)
         }
@@ -62,18 +91,33 @@ final class AudioProcessController {
     private(set) var processGroups = [AudioProcessGroup]()
 
     private var cancellables = Set<AnyCancellable>()
+    private var runningApplications = [NSRunningApplication]()
+    private var monitor: AudioProcessListMonitor?
 
     func activate() {
         logger.debug(#function)
+
+        guard monitor == nil else { return }
 
         NSWorkspace.shared
             .publisher(for: \.runningApplications, options: [.initial, .new])
             .map { $0.filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) }
             .sink { [weak self] apps in
                 guard let self else { return }
+                self.runningApplications = apps
                 self.reload(apps: apps)
             }
             .store(in: &cancellables)
+
+        // Audio-only processes (afplay, helpers) never appear in runningApplications.
+        let monitor = AudioProcessListMonitor { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.reload(apps: self.runningApplications)
+            }
+        }
+        monitor.start()
+        self.monitor = monitor
     }
 
     fileprivate func reload(apps: [NSRunningApplication]) {
@@ -189,6 +233,7 @@ extension AudioProcess.Kind {
         switch self {
         case .process: "Processes"
         case .app: "Apps"
+        case .system: "System"
         }
     }
 }

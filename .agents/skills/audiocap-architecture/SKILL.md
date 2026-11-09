@@ -8,7 +8,8 @@ description: AudioCap's CoreAudio process-tap pipeline - tap, private aggregate 
 Diagram: [`docs/img/architecture.svg`](../../../docs/img/architecture.svg). Upstream API notes: [`docs/coreaudio-taps.md`](../../../docs/coreaudio-taps.md).
 
 ## Lifecycle (start)
-1. PID → `AudioObjectID` with `kAudioHardwarePropertyTranslatePIDToProcessObject`. "All system audio" (PR 3) uses a global tap instead.
+1. PID → `AudioObjectID` with `kAudioHardwarePropertyTranslatePIDToProcessObject`. "All system audio" (`AudioProcess.allSystemAudio`, kind `.system`) uses `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object instead, and skips the source-quit/relaunch tracking.
+   The source list (`AudioProcessController`) reloads on `NSWorkspace.runningApplications` changes and on `AudioProcessListMonitor` events: `kAudioHardwarePropertyProcessObjectList` on the system object plus `kAudioProcessPropertyIsRunningOutput` on each process. Those listeners run on a private serial queue and are coalesced (150 ms) before one main-actor reload, so audio-only processes such as `afplay` show up.
 2. `CATapDescription(stereoMixdownOfProcesses: [objectID])`, keep its `uuid`; `AudioHardwareCreateProcessTap` → tap ID.
 3. Aggregate description: private (`kAudioAggregateDeviceIsPrivateKey`), tap list `[[kAudioSubTapUIDKey: uuid]]`, main sub-device = the clock device (default output today; `AudioCap Hi-Res` in Hi-Res mode). `AudioHardwareCreateAggregateDevice`.
 4. Preallocate the hand-off storage, then `AudioDeviceCreateIOProcIDWithBlock` and `AudioDeviceStart`.
@@ -26,7 +27,10 @@ Invalidation (source app quits, device disappears, default output changes) runs 
 | IO block | copy `AudioBufferList` into preallocated storage, update an atomic counter, signal. Nothing else: no allocation, locks, I/O, logging, main-actor hops. |
 | Writer queue (serial) | owns the `AVAudioFile`: create, write, close. Computes levels for the meter/auto-record from what it wrote. |
 | Converter (background) | reads the closed CAF, writes the export, drains to `endOfStream`. |
-| Main actor | UI state, start/stop requests, error display. |
+| Main actor | UI state, start/stop requests, error display. Creates the `CapturePipeline` (and its `AutoRecordMachine`) for each capture format. |
+
+## Auto-record
+`AutoRecordMachine` (pure, no CoreAudio) decides when takes open and close; `CapturePipeline`'s writer queue feeds it 512-frame chunks from the capture ring, with their level, through a `TakeSink`; the I/O block never sees it. In Wait for sound the pipeline's silence splitter is off (`splitEnabled`). Phases: idle → armed (pre-roll ring only) → recording → closing (first 0.5 s of silence written, the rest held) → armed again. Format changes, source loss and manual auto-split end a take through `endTake`, so the machine stays in sync. Mode changes apply at once via `setMode`. The machine creates one buffer only when it hands the pre-roll or held silence to the writer.
 
 ## Format pipeline
 tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossless) → export:
@@ -42,6 +46,8 @@ tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossles
 ## Gotchas
 - `1718449215` = `'fmt?'` (unsupported data format): settings and buffers disagree.
 - `560947818` = `'!obj'`: process object gone or no usable output device.
+- A global tap only delivers buffers while something is playing, so the first take's pre-roll can be shorter than 0.5 s.
+- On a VM with BlackHole, `afplay` can hang after an interrupted tap test (audio stuck); `sudo killall coreaudiod` recovers it.
 - Interleaved buffers expose only `floatChannelData[0]`; channel `c` of frame `f` is at `[f * channels + c]`. The upstream `SilenceDetector` indexed `floatChannelData[ch]`.
 - The upstream converter dropped the final partial block (`test.flac`: 3,412 frames short of `test.wav`). Drain until `endOfStream`.
 - The file must be closed before conversion or playback, otherwise the header disagrees with the data.

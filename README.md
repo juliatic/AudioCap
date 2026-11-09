@@ -21,7 +21,7 @@ Known problems in the current build (fixed by the new recording engine, PR 1):
 
 Planned (see the plan for details):
 - **New recording engine** (PR 1): lossless CAF capture, FLAC 24-bit, ALAC, WAV Float32, AAC 256 kbps; length check on every file; decoded error codes with a **Copy diagnostics** button.
-- **Auto-record** (PR 3): arm it, and recording starts when the app makes sound and stops after silence. Plus an "All system audio" source.
+- **Auto-record** (PR 3, "Wait for sound", the default): click **Start** to arm; a take starts when the source makes sound (with half a second of pre-roll) and ends after 2 s of silence (configurable), then it waits again. **Manual** mode records from Start to Stop. Plus an "All system audio" source (everything except AudioCap).
 - **Library and player** (PR 4): every take with its status (recording, converting, done, failed), a player with waveform, a level meter, a **Quality** panel and the output folder `~/Music/AudioCap`.
 - **Spanish and English interface** (PR 5), with text of at least 16 pt.
 - **Hi-Res mode** (PR 6): record at the source's full rate even when you listen on Bluetooth or display speakers.

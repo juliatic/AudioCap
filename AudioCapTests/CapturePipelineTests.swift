@@ -169,6 +169,42 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         XCTAssertEqual(takes.first?.capturedFrames, 48_000 + 49 * 480)
         XCTAssertEqual(takes.last?.capturedFrames, 24_000)
     }
+
+    func testWaitForSoundMakesOneTrimmedTakePerToneAndRearms() throws {
+        let collector = Collector()
+        var counter = 0
+        var options = CapturePipeline.Options(outputDirectory: directory, outputFormat: .wav, sourceName: "test",
+                                              silenceDetector: SilenceDetector(thresholdDb: -40, minSilenceDuration: 2),
+                                              makeBaseName: { counter += 1; return "take-\(counter)" },
+                                              drainInterval: 0.005, bufferedSeconds: 4)
+        options.autoRecord = AutoRecordMachine.Configuration()
+        options.mode = .waitForSound
+        let pipeline = CapturePipeline(format: format, options: options) { collector.add($0) }
+        var next = 0
+        var sampleTime = 0.0
+        let silence: (Int, Int) -> Float = { _, _ in 0 }
+        let tone: (Int, Int) -> Float = { i, _ in sinf(Float(i) * 0.0576) * 0.25 }
+        func play(_ seconds: Double, _ value: @escaping (Int, Int) -> Float) {
+            feed(pipeline, cycles: Int(48_000 * seconds) / 512, sizes: [512], start: &next, sampleTime: &sampleTime, value: value)
+            usleep(50_000)
+        }
+        play(1, silence)
+        XCTAssertEqual(pipeline.phase, .armed)
+        play(1, tone)
+        play(3, silence)
+        XCTAssertEqual(pipeline.phase, .armed, "re-armed after 2 s of silence")
+        play(1, tone)
+        play(3, silence)
+        pipeline.finish()
+
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        for take in takes {
+            // 0.5 s pre-roll + 1 s tone + 0.5 s tail.
+            XCTAssertEqual(Double(take.capturedFrames), 96_000, accuracy: 512)
+        }
+        XCTAssertEqual(pipeline.phase, .idle)
+    }
 }
 
 final class CaptureRingBufferTests: XCTestCase {

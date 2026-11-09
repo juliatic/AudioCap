@@ -22,7 +22,13 @@ final class CapturePipeline: @unchecked Sendable {
         var drainInterval: TimeInterval = 0.02
         /// Ring capacity in seconds of audio.
         var bufferedSeconds: Double = 4
+        /// When set, an `AutoRecordMachine` on the writer queue decides when takes open and close.
+        var autoRecord: AutoRecordMachine.Configuration?
+        var mode: AutoRecordMachine.Mode = .manual
     }
+
+    /// Frames per `AutoRecordMachine` step: the resolution of sound detection, pre-roll and tail.
+    static let autoRecordChunkFrames = 512
 
     enum Event {
         /// A take started (status `.recording`).
@@ -55,6 +61,10 @@ final class CapturePipeline: @unchecked Sendable {
     /// Jumps in the device's sample timeline between consecutive I/O cycles, and the frames they skipped.
     let discontinuities = Atomic<Int>(0)
     let skippedFrames = Atomic<Int>(0)
+    /// `AutoRecordMachine.Phase` of the writer queue's machine, encoded by `Self.code(for:)`.
+    private let phaseCode = Atomic<Int>(0)
+    /// Silence splitting (manual mode only); "Wait for sound" closes takes by itself.
+    private let splitEnabled = Atomic<Bool>(true)
     /// Reconnects (device rebuilds, tap recreation) during the current take.
     let reconnects = Atomic<Int>(0)
     private let signalSeen = Atomic<Bool>(false)
@@ -78,6 +88,25 @@ final class CapturePipeline: @unchecked Sendable {
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
     private var openFailed = false
+    private var machine: AutoRecordMachine?
+
+    var phase: AutoRecordMachine.Phase {
+        switch phaseCode.load(ordering: .relaxed) {
+        case 1: .armed
+        case 2: .recording
+        case 3: .closing
+        default: .idle
+        }
+    }
+
+    private static func code(for phase: AutoRecordMachine.Phase) -> Int {
+        switch phase {
+        case .idle: 0
+        case .armed: 1
+        case .recording: 2
+        case .closing: 3
+        }
+    }
 
     var level: AudioLevel {
         AudioLevel(rmsDb: Double(bitPattern: rmsBits.load(ordering: .relaxed)),
@@ -95,6 +124,13 @@ final class CapturePipeline: @unchecked Sendable {
         self.ring = CaptureRingBuffer(channelCount: channelCount, minimumCapacity: Int(format.sampleRate * options.bufferedSeconds))
         self.scratch = AVAudioPCMBuffer(pcmFormat: writerFormat, frameCapacity: 16_384)!
         self.queue = DispatchQueue(label: "CapturePipeline.writer", qos: .userInitiated)
+        if let configuration = options.autoRecord {
+            let machine = AutoRecordMachine(configuration: configuration, format: writerFormat, mode: options.mode)
+            machine.start()
+            self.machine = machine
+            phaseCode.store(Self.code(for: machine.phase), ordering: .relaxed)
+            splitEnabled.store(options.mode == .manual, ordering: .relaxed)
+        }
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + options.drainInterval, repeating: options.drainInterval, leeway: .milliseconds(5))
@@ -152,7 +188,7 @@ final class CapturePipeline: @unchecked Sendable {
             signalSeen.store(true, ordering: .relaxed)
         }
 
-        if detector != nil {
+        if detector != nil, splitEnabled.load(ordering: .relaxed) {
             let analysis = detector!.process(level: level, duration: Double(layout.frames) / format.sampleRate)
             if analysis.didTriggerSplit { ring.pushMarker() }
             if analysis.shouldDrop { return }
@@ -176,6 +212,11 @@ final class CapturePipeline: @unchecked Sendable {
             timer?.cancel()
             timer = nil
             drain()
+            if let machine {
+                var sink = Sink(pipeline: self)
+                machine.stop(sink: &sink)
+                publishPhase()
+            }
             closeTake()
             isFinished = true
         }
@@ -190,12 +231,12 @@ final class CapturePipeline: @unchecked Sendable {
             let marker = ring.peekMarker()
             if let marker, marker <= read {
                 ring.popMarker()
-                closeTake()
+                endTake()
                 continue
             }
             var count = ring.availableFrames
             if let marker { count = min(count, marker - read) }
-            count = min(count, Int(scratch.frameCapacity))
+            count = min(count, machine == nil ? Int(scratch.frameCapacity) : Self.autoRecordChunkFrames)
             guard count > 0 else { return }
 
             let data = scratch.floatChannelData!
@@ -203,15 +244,60 @@ final class CapturePipeline: @unchecked Sendable {
             scratch.frameLength = AVAudioFrameCount(count)
             takeOverflow += ring.overflowFrames.exchange(0, ordering: .relaxed)
 
-            if writer == nil, !openTake() { continue }
-            for c in 0..<channelCount {
-                var channelPeak: Float = 0
-                vDSP_maxmgv(data[c], 1, &channelPeak, vDSP_Length(count))
-                takePeak = max(takePeak, channelPeak)
+            if let machine {
+                var sink = Sink(pipeline: self)
+                machine.process(scratch, level: AudioLevel(measuring: scratch), sink: &sink)
+                publishPhase()
+                continue
             }
-            writer?.write(scratch)
-            currentTakeFrames.store(Int(writer?.framesWritten ?? 0), ordering: .relaxed)
+            if writer == nil, !openTake() { continue }
+            writeToTake(scratch)
         }
+    }
+
+    private func writeToTake(_ buffer: AVAudioPCMBuffer) {
+        guard let writer, let data = buffer.floatChannelData else { return }
+        for c in 0..<channelCount {
+            var channelPeak: Float = 0
+            vDSP_maxmgv(data[c], 1, &channelPeak, vDSP_Length(buffer.frameLength))
+            takePeak = max(takePeak, channelPeak)
+        }
+        writer.write(buffer)
+        currentTakeFrames.store(Int(writer.framesWritten), ordering: .relaxed)
+    }
+
+    /// Ends the open take at a split marker; the machine re-arms ("Wait for sound") or reopens on the next frame.
+    private func endTake() {
+        if let machine {
+            var sink = Sink(pipeline: self)
+            machine.endTake(sink: &sink)
+            publishPhase()
+        }
+        closeTake()
+    }
+
+    /// Switches the running machine between "Wait for sound" and manual.
+    func setMode(_ mode: AutoRecordMachine.Mode) {
+        splitEnabled.store(mode == .manual, ordering: .relaxed)
+        queue.async { [self] in
+            guard !isFinished, let machine else { return }
+            var sink = Sink(pipeline: self)
+            machine.setMode(mode, sink: &sink)
+            publishPhase()
+        }
+    }
+
+    private func publishPhase() {
+        if let machine { phaseCode.store(Self.code(for: machine.phase), ordering: .relaxed) }
+    }
+
+    /// Connects `AutoRecordMachine` to the take files. Writer queue only.
+    private struct Sink: TakeSink {
+        unowned let pipeline: CapturePipeline
+
+        mutating func openTake() -> Bool { pipeline.writer != nil || pipeline.openTake() }
+        mutating func write(_ buffer: AVAudioPCMBuffer) { pipeline.writeToTake(buffer) }
+        mutating func closeTake() { pipeline.closeTake() }
     }
 
     private func openTake() -> Bool {
