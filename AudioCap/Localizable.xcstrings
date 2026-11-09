@@ -781,6 +781,16 @@
         }
       }
     },
+    "The capture was reconnected %lld time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconexiones de la captura: %lld (cambio de dispositivo de salida, reactivación o recuperación del silencio); el audio que sonó durante una reconexión no está en la toma."
+          }
+        }
+      }
+    },
     "The process tap is not available." : {
       "localizations" : {
         "es" : {
