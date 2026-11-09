@@ -369,7 +369,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apps"
+            "value" : "Aplicaciones"
           }
         }
       }
@@ -1924,7 +1924,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tap"
+            "value" : "Captura del proceso"
           }
         }
       }
@@ -2196,7 +2196,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La fuente no indica su frecuencia. Si la pista no está a %@, se remuestrea antes del tap: usa Igualar la frecuencia del dispositivo de salida."
+            "value" : "La fuente no indica su frecuencia. Si la pista no está a %@, se remuestrea antes de que AudioCap la capture: usa Igualar la frecuencia del dispositivo de salida."
           }
         }
       }
