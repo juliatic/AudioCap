@@ -70,6 +70,16 @@ final class TakeWarningTests: XCTestCase {
             .hasPrefix("Puede que la toma empiece hasta \(shown) s tarde"))
     }
 
+    func testShortSoundThenTrimmedZerosRenderingAndCoding() throws {
+        let (sound, zeros) = (0.05.formatted(.number.precision(.fractionLength(3))), 2.0.formatted(.number.precision(.fractionLength(3))))
+        let warning = TakeWarning.shortSoundThenTrimmedZeros(soundSeconds: 0.05, zeroSeconds: 2)
+        XCTAssertEqual(warning.text(source: .allSystemAudio),
+                       "This take kept only \(sound) s of sound, followed by \(zeros) s of digital zeros while \(TakeSource.allSystemAudio.displayName()) was playing; auto-record ended the take and trimmed those zeros. Unless the sound really stopped there, CoreAudio delivered zeros instead of its audio and the rest is missing.")
+        XCTAssertEqual(warning.text(source: .app(name: "afplay"), bundle: try spanish),
+                       "Esta toma solo conservó \(sound) s de sonido, seguidos de \(zeros) s de ceros digitales mientras afplay sonaba; la grabación automática cerró la toma y recortó esos ceros. Salvo que el sonido terminara realmente ahí, CoreAudio entregó ceros en lugar de su audio y falta el resto.")
+        XCTAssertEqual(try JSONDecoder().decode(TakeWarning.self, from: JSONEncoder().encode(warning)), warning)
+    }
+
     func testMostlyZeroRendering() throws {
         let (zeros, span) = (2.7.formatted(.number.precision(.fractionLength(3))), 2.71.formatted(.number.precision(.fractionLength(3))))
         XCTAssertEqual(TakeWarning.mostlyZero(zeroSeconds: 2.7, spanSeconds: 2.71).text(source: .app(name: "afplay")),

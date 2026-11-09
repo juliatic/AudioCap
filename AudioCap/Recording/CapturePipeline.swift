@@ -157,6 +157,10 @@ final class CapturePipeline: @unchecked Sendable {
     private var isFinished = false
     private var openFailed = false
     private var machine: AutoRecordMachine?
+    /// The chunk the machine is processing: the writer's frame count before it, its length, whether it is all zero.
+    private var trimProbe: (base: Int, frames: Int, isZero: Bool)?
+    private var heldTrimmedZeros = 0
+    private var trimmedNonZero = false
 
     var phase: AutoRecordMachine.Phase {
         switch phaseCode.load(ordering: .relaxed) {
@@ -364,6 +368,11 @@ final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// Drains the ring now instead of waiting for the timer, so a test producer can't outrun a busy writer queue.
+    func drainNow() {
+        queue.sync { drain() }
+    }
+
     /// Writes everything published so far. Runs on the writer queue.
     private func drain() {
         dispatchPrecondition(condition: .onQueue(queue))
@@ -391,8 +400,19 @@ final class CapturePipeline: @unchecked Sendable {
                 if !sourceIsOutputting.load(ordering: .relaxed) { (pendingSplit, lastTakeTrailingZeros) = (nil, 0) }
             }
             if let machine {
+                let base = writer.map { Int($0.framesWritten) }
+                if let base { trimProbe = (base, count, Self.isAllZero(scratch, channels: channelCount)) }
                 var sink = Sink(pipeline: self)
                 machine.process(scratch, level: AudioLevel(measuring: scratch), sink: &sink)
+                if let base, let probe = trimProbe, let writer {
+                    let written = Int(writer.framesWritten) - base
+                    if written > count {
+                        (heldTrimmedZeros, trimmedNonZero) = (0, false) // the held silence was written after all
+                    } else if written < count {
+                        if probe.isZero { heldTrimmedZeros += count - written } else { trimmedNonZero = true }
+                    }
+                }
+                trimProbe = nil
                 if takeOpeningFrames == nil, let writer { takeOpeningFrames = Int(writer.framesWritten) }
                 publishPhase()
                 chargeTimeline()
@@ -424,6 +444,33 @@ final class CapturePipeline: @unchecked Sendable {
                 takeLateStartFrames = max(takeLateStartFrames ?? 0, entry.frames)
             }
         }
+    }
+
+    private static func isAllZero(_ buffer: AVAudioPCMBuffer, channels: Int) -> Bool {
+        guard let data = buffer.floatChannelData else { return false }
+        for c in 0..<channels {
+            var peak: Float = 0
+            vDSP_maxmgv(data[c], 1, &peak, vDSP_Length(buffer.frameLength))
+            if peak > 0 { return false }
+        }
+        return true
+    }
+
+    /// Silence auto-record held back from the open take (it writes only its tail) and drops when the take closes:
+    /// counted into `takeZeros` and `takeEdges`, so a take cut to zeros right after a short sound still shows them.
+    /// Only all-zero chunks count; any held chunk with audio in it makes the count unreliable and voids it.
+    private func chargeTrimmedSilence(_ writer: CaptureWriter) {
+        var trimmed = heldTrimmedZeros
+        if let probe = trimProbe {
+            let dropped = max(0, probe.frames - (Int(writer.framesWritten) - probe.base))
+            if probe.isZero { trimmed += dropped } else if dropped > 0 { trimmedNonZero = true }
+        }
+        if !trimmedNonZero, trimmed > 0 {
+            let playing = sourceIsOutputting.load(ordering: .relaxed)
+            takeZeros.addTrimmedZeros(trimmed, sourceIsPlaying: playing)
+            takeEdges.addTrimmedZeros(trimmed, sourceIsPlaying: playing)
+        }
+        (heldTrimmedZeros, trimmedNonZero, trimProbe) = (0, false, nil)
     }
 
     private func writeToTake(_ buffer: AVAudioPCMBuffer) {
@@ -493,7 +540,7 @@ final class CapturePipeline: @unchecked Sendable {
         isTakeOpen.store(true, ordering: .relaxed)
         (takeJumps, takeSkippedFrames) = (0, 0)
         takeLateStartFrames = nil
-        takeZeros = ZeroSpanMeter(maxHoleFrames: maxDropoutFrames)
+        takeZeros = ZeroSpanMeter(maxHoleFrames: maxDropoutFrames, sampleRate: format.sampleRate)
         var unwrittenZeros = splitSilenceZeroFrames.exchange(0, ordering: .relaxed)
         if splitSilenceSourceStopped.exchange(false, ordering: .relaxed) {
             (pendingSplit, lastTakeTrailingZeros, unwrittenZeros) = (nil, 0, 0)
@@ -514,6 +561,7 @@ final class CapturePipeline: @unchecked Sendable {
         takeOverflow += ring.overflowFrames.exchange(0, ordering: .relaxed)
         chargeTimeline()
         guard let writer, var take else { return }
+        chargeTrimmedSilence(writer)
         self.writer = nil
         self.take = nil
         isTakeOpen.store(false, ordering: .relaxed)
@@ -550,6 +598,9 @@ final class CapturePipeline: @unchecked Sendable {
         if takeZeros.isMostlyZero(sampleRate: format.sampleRate) {
             warnings.append(.mostlyZero(zeroSeconds: Double(takeZeros.zeroFrames) / format.sampleRate,
                                         spanSeconds: Double(takeZeros.spanFrames) / format.sampleRate))
+        } else if takeZeros.isShortSoundThenTrimmedZeros(sampleRate: format.sampleRate) {
+            warnings.append(.shortSoundThenTrimmedZeros(soundSeconds: Double(takeZeros.soundFrames) / format.sampleRate,
+                                                        zeroSeconds: Double(takeZeros.trailingZeroFrames) / format.sampleRate))
         }
         warnings += edgeWarnings(take)
         take.warnings = warnings
@@ -567,6 +618,13 @@ struct PassageEdges {
     /// −40 dBFS: the waveform next to the zeros must reach this within `windowSeconds`.
     static let level: Float = 0.01
     static let windowSeconds = 0.003
+    /// The waveform before the last `windowSeconds` must not be much louder than in them: a fade has already decayed
+    /// by then, a cut has not. The tap rings for ~1 ms at a hard cut (see `ZeroSpanMeter.edgeSeconds`), so the last
+    /// samples before the zeros are tiny either way.
+    static let bodySeconds = 0.02
+    static let notDecayed: Float = 0.5
+    /// Ringing ahead of a hard onset stays below this fraction of the onset's peak (≤ 5 % measured).
+    static let ringing: Float = 0.1
     /// A sample next to exact zero that is at least this fraction of the nearby peak is mid-waveform.
     static let midWaveform: Float = 0.25
     static let minZeroFrames = ZeroSpanMeter.minHoleFrames
@@ -588,24 +646,28 @@ struct PassageEdges {
     var sourceKeptPlaying: Bool { !sourceStoppedSinceSound }
 
     private let windowFrames: Int
+    private let historyFrames: Int
     /// Exact-zero frames right before the take's first frame (split silence that was not written).
     private let zerosBefore: Int
-    /// The last `windowFrames` magnitudes, then the current buffer's.
+    /// The last `historyFrames` magnitudes, then the current buffer's.
     private var magnitudes: [Float]
+    /// The first `windowFrames` magnitudes from the first sound on.
+    private var onsetMagnitudes: [Float]
+    private var onsetCount = 0
     private var channelMagnitudes: [Float] = []
     private var signalSeen = false
     private var sourceStoppedBeforeSound = false
     private var sourceStoppedSinceSound = false
     private var cutIsAbrupt = false
     private var onsetFrame = 0
-    private var onsetFirst: Float = 0
-    private var onsetPeak: Float = 0
     private var onsetRemaining = 0
 
     init(sampleRate: Double, zerosBefore: Int = 0) {
         windowFrames = max(1, Int(sampleRate * Self.windowSeconds))
+        historyFrames = windowFrames + max(1, Int(sampleRate * Self.bodySeconds))
         self.zerosBefore = zerosBefore
-        magnitudes = Array(repeating: 0, count: windowFrames)
+        magnitudes = Array(repeating: 0, count: historyFrames)
+        onsetMagnitudes = Array(repeating: 0, count: windowFrames)
     }
 
     mutating func add(_ data: UnsafePointer<UnsafeMutablePointer<Float>>, channels: Int, frames count: Int, sourceIsPlaying: Bool) {
@@ -613,7 +675,7 @@ struct PassageEdges {
         if !sourceIsPlaying {
             if signalSeen { sourceStoppedSinceSound = true } else { sourceStoppedBeforeSound = true }
         }
-        let w = windowFrames
+        let h = historyFrames
         var history: [Float] = []
         var scratch: [Float] = []
         swap(&history, &magnitudes)
@@ -622,11 +684,11 @@ struct PassageEdges {
             swap(&history, &magnitudes)
             swap(&scratch, &channelMagnitudes)
         }
-        if history.count < w + count { history += Array(repeating: 0, count: w + count - history.count) }
+        if history.count < h + count { history += Array(repeating: 0, count: h + count - history.count) }
         if channels > 1, scratch.count < count { scratch = Array(repeating: 0, count: count) }
         history.withUnsafeMutableBufferPointer { buffer in
             let all = buffer.baseAddress!
-            let current = all + w
+            let current = all + h
             let n = vDSP_Length(count)
             vDSP_vabs(data[0], 1, current, 1, n)
             scratch.withUnsafeMutableBufferPointer { channel in
@@ -635,14 +697,10 @@ struct PassageEdges {
                     vDSP_vmax(current, 1, channel.baseAddress!, 1, current, 1, n)
                 }
             }
-            func peak(_ start: UnsafePointer<Float>, _ length: Int) -> Float {
-                var value: Float = 0
-                vDSP_maxv(start, 1, &value, vDSP_Length(length))
-                return value
-            }
+            let peak = Self.peak
             if onsetRemaining > 0 {
                 let length = min(onsetRemaining, count)
-                onsetPeak = max(onsetPeak, peak(current, length))
+                recordOnset(current, length)
                 onsetRemaining -= length
                 if onsetRemaining == 0 { decideOnset(sourceIsPlaying: sourceIsPlaying) }
             }
@@ -654,7 +712,7 @@ struct PassageEdges {
                 sourceStoppedSinceSound = false
             } else if highest == 0 {
                 if signalSeen {
-                    if trailingZeros == 0 { noteCut(at: current, peak: peak(current - w, w), sourceIsPlaying: sourceIsPlaying) }
+                    if trailingZeros == 0 { noteCut(before: current, sourceIsPlaying: sourceIsPlaying) }
                     trailingZeros += count
                 } else {
                     leadingZeros += count
@@ -664,7 +722,7 @@ struct PassageEdges {
                     let magnitude = current[f]
                     if magnitude == 0 {
                         if signalSeen {
-                            if trailingZeros == 0 { noteCut(at: current + f, peak: peak(current + f - w, w), sourceIsPlaying: sourceIsPlaying) }
+                            if trailingZeros == 0 { noteCut(before: current + f, sourceIsPlaying: sourceIsPlaying) }
                             trailingZeros += 1
                         } else {
                             leadingZeros += 1
@@ -674,31 +732,58 @@ struct PassageEdges {
                     if !signalSeen {
                         signalSeen = true
                         onsetFrame = frames + f
-                        onsetFirst = magnitude
-                        let length = min(w, count - f)
-                        onsetPeak = peak(current + f, length)
-                        onsetRemaining = w - length
+                        let length = min(windowFrames, count - f)
+                        recordOnset(current + f, length)
+                        onsetRemaining = windowFrames - length
                         if onsetRemaining == 0 { decideOnset(sourceIsPlaying: sourceIsPlaying) }
                     }
                     trailingZeros = 0
                     sourceStoppedSinceSound = false
                 }
             }
-            memmove(all, all + count, w * MemoryLayout<Float>.stride)
+            memmove(all, all + count, h * MemoryLayout<Float>.stride)
         }
         frames += count
     }
 
-    /// `zero` points at the first zero after sound; `peak` is the loudest magnitude in the window before it.
-    private mutating func noteCut(at zero: UnsafePointer<Float>, peak: Float, sourceIsPlaying: Bool) {
-        cutIsAbrupt = sourceIsPlaying && peak >= Self.level && zero[-1] >= Self.midWaveform * peak
+    /// Zero frames after the last written frame that were dropped instead of written (auto-record trims the silence
+    /// that closes a take), so a take with a short tail, or none, still shows the cut and how long the zeros lasted.
+    mutating func addTrimmedZeros(_ count: Int, sourceIsPlaying: Bool) {
+        guard count > 0, signalSeen else { return }
+        if !sourceIsPlaying { sourceStoppedSinceSound = true }
+        if trailingZeros == 0 {
+            let h = historyFrames
+            magnitudes.withUnsafeBufferPointer { noteCut(before: $0.baseAddress! + h, sourceIsPlaying: sourceIsPlaying) }
+        }
+        trailingZeros += count
+        frames += count
     }
 
+    private static func peak(_ start: UnsafePointer<Float>, _ length: Int) -> Float {
+        var value: Float = 0
+        vDSP_maxv(start, 1, &value, vDSP_Length(length))
+        return value
+    }
+
+    /// `zero` points at the first zero after sound, with `historyFrames` magnitudes before it.
+    private mutating func noteCut(before zero: UnsafePointer<Float>, sourceIsPlaying: Bool) {
+        let window = Self.peak(zero - windowFrames, windowFrames)
+        let body = Self.peak(zero - historyFrames, historyFrames - windowFrames)
+        cutIsAbrupt = sourceIsPlaying && window >= Self.level && window >= Self.notDecayed * body
+    }
+
+    private mutating func recordOnset(_ start: UnsafePointer<Float>, _ length: Int) {
+        for i in 0..<min(length, windowFrames - onsetCount) { onsetMagnitudes[onsetCount + i] = start[i] }
+        onsetCount = min(windowFrames, onsetCount + length)
+    }
+
+    /// Mid-waveform: the first sample above the ringing level is already at least `midWaveform` of the peak.
     private mutating func decideOnset(sourceIsPlaying: Bool) {
-        if sourceIsPlaying, !sourceStoppedBeforeSound, leadingZeros + zerosBefore >= Self.minZeroFrames,
-           onsetPeak >= Self.level, onsetFirst >= Self.midWaveform * onsetPeak {
-            abruptOnsetFrame = onsetFrame
-        }
+        let samples = onsetMagnitudes[..<onsetCount]
+        let peak = samples.max() ?? 0
+        guard sourceIsPlaying, !sourceStoppedBeforeSound, leadingZeros + zerosBefore >= Self.minZeroFrames,
+              peak >= Self.level, let first = samples.first(where: { $0 >= Self.ringing * peak }) else { return }
+        if first >= Self.midWaveform * peak { abruptOnsetFrame = onsetFrame }
     }
 
     /// Zero frames between an abrupt end and the next take's abrupt onset: the earlier take's trailing zeros, the
@@ -750,6 +835,12 @@ struct ZeroSpanMeter {
     /// Zeros this long between two loud samples are a hole cut into the audio: real audio cannot jump from a loud
     /// sample to exact zero on every channel and back (engine harness, 48 kHz: 23-frame holes in every 512-frame cycle).
     static let minHoleFrames = 8
+    /// How far from a hole its loud edge may be. The tap smooths a hard cut: the last loud sample is followed by
+    /// about 1 ms of ringing below 5 % of its level before the exact zeros, and the same ringing leads into the
+    /// audio after them (afplay through a process tap, 48 kHz).
+    static let edgeSeconds = 0.002
+    /// Zeros trimmed after a short sound make the take mostly zero when they are more than this fraction of its span.
+    static let trimmedZeroFraction = 0.8
     /// Frames after the first non-zero frame while the source was playing.
     private(set) var spanFrames = 0
     /// Of those, frames in zero runs of at least `minRunFrames`, including a trailing run.
@@ -757,49 +848,96 @@ struct ZeroSpanMeter {
     /// Zero runs of `minHoleFrames` up to `maxHoleFrames` between loud samples (`CapturePipeline.dropoutEdge`).
     private(set) var holes = 0
     private(set) var holeFrames = 0
+    /// Zeros after the take's last sound that were not written to it (auto-record's trimmed silence), while the
+    /// source was playing.
+    private(set) var trimmedZeros = 0
     let maxHoleFrames: Int
+    private let edgeFrames: Int
     private var closedZeroFrames = 0
     private var run = 0
     private var runStartMagnitude: Float = 0
-    private var lastMagnitude: Float = 0
+    private var recentPeak: Float = 0
+    private var recentLeft = 0
+    private var pendingHole = 0
+    private var pendingLeft = 0
     private var signalSeen = false
 
-    init(maxHoleFrames: Int = .max) {
+    init(maxHoleFrames: Int = .max, sampleRate: Double = 48_000) {
         self.maxHoleFrames = maxHoleFrames
+        edgeFrames = max(1, Int(sampleRate * Self.edgeSeconds))
     }
 
     mutating func add(_ data: UnsafePointer<UnsafeMutablePointer<Float>>, channels: Int, frames: Int, sourceIsPlaying: Bool) {
         guard sourceIsPlaying else {
             endRun()
-            lastMagnitude = 0
+            (recentPeak, recentLeft, pendingHole, pendingLeft) = (0, 0, 0, 0)
             return
         }
         for f in 0..<frames {
             var magnitude: Float = 0
             for c in 0..<channels { magnitude = max(magnitude, abs(data[c][f])) }
+            if pendingLeft > 0 {
+                pendingLeft -= 1
+                if magnitude >= CapturePipeline.dropoutEdge {
+                    holes += 1
+                    holeFrames += pendingHole
+                    pendingLeft = 0
+                }
+            }
             if magnitude == 0 {
                 guard signalSeen else { continue }
-                if run == 0 { runStartMagnitude = lastMagnitude }
+                if run == 0 { runStartMagnitude = recentPeak }
                 run += 1
                 spanFrames += 1
             } else {
-                if run >= Self.minHoleFrames, run <= maxHoleFrames,
-                   runStartMagnitude >= CapturePipeline.dropoutEdge, magnitude >= CapturePipeline.dropoutEdge {
-                    holes += 1
-                    holeFrames += run
+                if run >= Self.minHoleFrames, run <= maxHoleFrames, runStartMagnitude >= CapturePipeline.dropoutEdge {
+                    pendingHole = run
+                    pendingLeft = edgeFrames
+                    if magnitude >= CapturePipeline.dropoutEdge {
+                        holes += 1
+                        holeFrames += run
+                        pendingLeft = 0
+                    }
                 }
+                if run > 0 { (recentPeak, recentLeft) = (0, 0) }
                 endRun()
                 signalSeen = true
                 spanFrames += 1
-                lastMagnitude = magnitude
+                if magnitude >= recentPeak || recentLeft == 0 {
+                    (recentPeak, recentLeft) = (magnitude, edgeFrames)
+                } else {
+                    recentLeft -= 1
+                }
             }
         }
+    }
+
+    /// Zero frames after the last written frame that were dropped instead of written (auto-record trims the
+    /// silence that closes a take), so a take cut to zeros early still shows them.
+    mutating func addTrimmedZeros(_ frames: Int, sourceIsPlaying: Bool) {
+        guard sourceIsPlaying, signalSeen, frames > 0 else { return }
+        trimmedZeros += frames
     }
 
     /// At least `minZeroSeconds` of zeros, and more than half of the span after the first sound.
     func isMostlyZero(sampleRate: Double) -> Bool {
         Double(zeroFrames) >= Self.minZeroSeconds * sampleRate && zeroFrames * 2 > spanFrames
     }
+
+    /// Not `isMostlyZero` from the written frames alone, but zeros including the trimmed ones are at least
+    /// `minZeroSeconds` and more than `trimmedZeroFraction` of the span: a short sound, then zeros while the source
+    /// played. A normal ending (the sound, then the trimmed silence) has a much longer sound.
+    func isShortSoundThenTrimmedZeros(sampleRate: Double) -> Bool {
+        guard trimmedZeros > 0, !isMostlyZero(sampleRate: sampleRate) else { return false }
+        let zeros = zeroFrames + trimmedZeros + (run < Self.minRunFrames ? run : 0)
+        return Double(zeros) >= Self.minZeroSeconds * sampleRate
+            && Double(zeros) > Self.trimmedZeroFraction * Double(spanFrames + trimmedZeros)
+    }
+
+    /// First to last sound, for `isShortSoundThenTrimmedZeros`.
+    var soundFrames: Int { spanFrames - run }
+    /// Zeros after the last sound, written and trimmed.
+    var trailingZeroFrames: Int { run + trimmedZeros }
 
     private mutating func endRun() {
         if run >= Self.minRunFrames { closedZeroFrames += run }

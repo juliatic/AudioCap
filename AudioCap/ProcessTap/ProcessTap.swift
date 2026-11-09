@@ -477,8 +477,16 @@ final class ProcessTap {
     }
 
     /// `true` when the source app reports that it is playing audio right now.
+    /// The source reports running output; for "All system audio", any process other than AudioCap does.
     var isSourceOutputting: Bool {
-        isSourceAvailable && process.objectID.readProcessIsRunningOutput()
+        guard process.kind != .system else { return Self.isAnyOtherProcessOutputting() }
+        return isSourceAvailable && process.objectID.readProcessIsRunningOutput()
+    }
+
+    private static func isAnyOtherProcessOutputting() -> Bool {
+        let own = ProcessInfo.processInfo.processIdentifier
+        guard let objects = try? AudioObjectID.readProcessList() else { return false }
+        return objects.contains { $0.readProcessIsRunningOutput() && $0.readProcessPID() != own }
     }
 
     /// Replaces the tap and the aggregate device with fresh ones, restarting I/O if it was running.

@@ -33,6 +33,8 @@ enum TakeWarning: Codable, Hashable, Sendable {
     case startMayBeLate(seconds: Double)
     /// More than half of the take after its first sound is digital zero while the source was playing.
     case mostlyZero(zeroSeconds: Double, spanSeconds: Double)
+    /// A short sound, then digital zeros while the source was playing, most of them trimmed by auto-record.
+    case shortSoundThenTrimmedZeros(soundSeconds: Double, zeroSeconds: Double)
     /// The take's first sound starts mid-waveform right after exact zeros while the source was playing.
     case abruptStart(atSeconds: Double)
     /// The take's sound stops mid-waveform into exact zeros while the source kept playing.
@@ -67,6 +69,11 @@ enum TakeWarning: Codable, Hashable, Sendable {
             let zeroText = zeroSeconds.formatted(.number.precision(.fractionLength(3)))
             let spanText = spanSeconds.formatted(.number.precision(.fractionLength(3)))
             return String(localized: "Most of this take after its first sound is digital zero (\(zeroText) s of \(spanText) s) while \(sourceName) was playing. Unless that passage was really silent, CoreAudio delivered zeros instead of its audio and that audio is missing from the take.", bundle: bundle)
+        case .shortSoundThenTrimmedZeros(let soundSeconds, let zeroSeconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let soundText = soundSeconds.formatted(.number.precision(.fractionLength(3)))
+            let zeroText = zeroSeconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "This take kept only \(soundText) s of sound, followed by \(zeroText) s of digital zeros while \(sourceName) was playing; auto-record ended the take and trimmed those zeros. Unless the sound really stopped there, CoreAudio delivered zeros instead of its audio and the rest is missing.", bundle: bundle)
         case .abruptStart(let atSeconds):
             let sourceName = source.displayName(bundle: bundle)
             let atText = atSeconds.formatted(.number.precision(.fractionLength(3)))

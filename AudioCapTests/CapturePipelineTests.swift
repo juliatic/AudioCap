@@ -36,7 +36,8 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
     }
 
     /// Feeds `frames` interleaved stereo frames per cycle, with sample values that encode the running frame index.
-    private func feed(_ pipeline: CapturePipeline, cycles: Int, sizes: [Int], start: inout Int, sampleTime: inout Double, value: ((Int, Int) -> Float)? = nil) {
+    private func feed(_ pipeline: CapturePipeline, cycles: Int, sizes: [Int], start: inout Int, sampleTime: inout Double, value: ((Int, Int) -> Float)? = nil,
+                      drainEvery: Int? = nil) {
         let maxFrames = sizes.max()!
         var interleaved = [Float](repeating: 0, count: maxFrames * 2)
         var time = AudioTimeStamp()
@@ -55,7 +56,11 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
             }
             start += frames
             sampleTime += Double(frames)
-            if cycle % 64 == 0 { usleep(200) } // let the drain timer interleave with the producer
+            if let drainEvery {
+                if cycle % drainEvery == drainEvery - 1 { pipeline.drainNow() }
+            } else if cycle % 64 == 0 {
+                usleep(200) // let the drain timer interleave with the producer
+            }
         }
     }
 
@@ -64,8 +69,11 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let pipeline = makePipeline(collector)
         var next = 0
         var sampleTime = 0.0
-        // 6,000 cycles of varying sizes (about 54 s of audio at 48 kHz).
-        feed(pipeline, cycles: 6_000, sizes: [512, 471, 1_024, 333, 480, 512], start: &next, sampleTime: &sampleTime)
+        // 6,000 cycles of varying sizes (about 54 s of audio at 48 kHz). Draining synchronously every 64 cycles (at most
+        // 65,536 frames, a third of the 4 s ring) keeps the test independent of how busy the machine is; the drain
+        // timer still runs in between.
+        feed(pipeline, cycles: 6_000, sizes: [512, 471, 1_024, 333, 480, 512], start: &next, sampleTime: &sampleTime,
+             drainEvery: 64)
         pipeline.finish()
 
         let takes = collector.closed
@@ -460,6 +468,38 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         // that buffer and the rest of the silence are dropped.
         XCTAssertEqual(takes.first?.capturedFrames, 48_000 + 49 * 480)
         XCTAssertEqual(takes.last?.capturedFrames, 24_000)
+    }
+
+    /// "All system audio" live run: a 0.05 s burst of a 2 s tone, then zeros while the source played; auto-record
+    /// keeps a 0.5 s tail, closes after 2 s and trims the rest, so the written frames alone show nothing.
+    func testShortBurstThenTrimmedZerosWhileTheSourcePlaysIsFlagged() throws {
+        let collector = Collector()
+        var options = CapturePipeline.Options(outputDirectory: directory, outputFormat: .wav, sourceName: "test",
+                                              silenceDetector: nil, makeBaseName: { "take" },
+                                              drainInterval: 0.005, bufferedSeconds: 4)
+        options.autoRecord = AutoRecordMachine.Configuration()
+        options.mode = .waitForSound
+        let pipeline = CapturePipeline(format: format, options: options) { collector.add($0) }
+        var next = 0
+        var sampleTime = 0.0
+        let burstStart = 48_000, burstFrames = 2_400 // 50 periods of 1 kHz from its peak: cut at full level
+        feed(pipeline, cycles: 4 * 48_000 / 512, sizes: [512], start: &next, sampleTime: &sampleTime) { i, _ in
+            (burstStart..<burstStart + burstFrames).contains(i) ? 0.5 * Float(cos(2 * Double.pi * 1_000 * Double(i - burstStart) / 48_000)) : 0
+        }
+        usleep(50_000)
+        XCTAssertEqual(pipeline.phase, .armed)
+        pipeline.finish()
+
+        let take = try XCTUnwrap(collector.closed.first)
+        XCTAssertEqual(collector.closed.count, 1)
+        XCTAssertEqual(Double(take.capturedFrames), 48_000 + Double(burstFrames), accuracy: 1_024, "pre-roll + burst + tail")
+        XCTAssertFalse(take.warnings.contains { if case .mostlyZero = $0 { true } else { false } })
+        XCTAssertTrue(take.warnings.contains(.abruptEnd(atSeconds: Double(24_000 + burstFrames) / 48_000)) ||
+                      take.warnings.contains { if case .abruptEnd = $0 { true } else { false } }, "\(take.warnings)")
+        let short = take.warnings.compactMap { if case .shortSoundThenTrimmedZeros(let sound, let zeros) = $0 { (sound, zeros) } else { nil } }.first
+        let (sound, zeros) = try XCTUnwrap(short, "\(take.warnings)")
+        XCTAssertEqual(sound, 0.05, accuracy: 0.001)
+        XCTAssertEqual(zeros, 2, accuracy: 0.02)
     }
 
     func testWaitForSoundMakesOneTrimmedTakePerToneAndRearms() throws {

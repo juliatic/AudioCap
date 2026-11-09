@@ -1232,6 +1232,16 @@
         }
       }
     },
+    "This take kept only %@ s of sound, followed by %@ s of digital zeros while %@ was playing; auto-record ended the take and trimmed those zeros. Unless the sound really stopped there, CoreAudio delivered zeros instead of its audio and the rest is missing." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta toma solo conservó %1$@ s de sonido, seguidos de %2$@ s de ceros digitales mientras %3$@ sonaba; la grabación automática cerró la toma y recortó esos ceros. Salvo que el sonido terminara realmente ahí, CoreAudio entregó ceros en lugar de su audio y falta el resto."
+          }
+        }
+      }
+    },
     "Most of this take after its first sound is digital zero (%@ s of %@ s) while %@ was playing. Unless that passage was really silent, CoreAudio delivered zeros instead of its audio and that audio is missing from the take." : {
       "localizations" : {
         "es" : {
