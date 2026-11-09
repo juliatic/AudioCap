@@ -35,6 +35,7 @@ protocol AudioOutputSystem: AnyObject {
     /// Output-capable devices other than `excludedUID`, in CoreAudio order.
     func outputDevices(excluding excludedUID: String) -> [AudioOutputDevice]
     func setNominalSampleRate(_ rate: Double, uid: String) throws
+    func deviceID(uid: String) throws -> AudioDeviceID
 }
 
 /// `AudioOutputSystem` backed by the HAL.

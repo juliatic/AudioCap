@@ -67,12 +67,18 @@
         }
       }
     },
-    "Monitor unavailable: %@" : {
+    "Monitor unavailable on %@: %@ The recording is not affected." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monitor unavailable on %1$@: %2$@ The recording is not affected."
+          }
+        },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Escucha no disponible: %@"
+            "value" : "Escucha no disponible en %1$@: %2$@ La grabación no se ve afectada."
           }
         }
       }

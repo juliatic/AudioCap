@@ -27,6 +27,7 @@ final class FakeOutputSystem: AudioOutputSystem {
         guard HiResDevice.isSupported(rate) else { throw "unsupported" }
         rates[uid] = rate
     }
+    func deviceID(uid: String) throws -> AudioDeviceID { throw "No HAL device for \(uid) in tests." }
 
     func remove(_ uid: String) {
         devices.removeAll { $0.uid == uid }
@@ -296,5 +297,72 @@ final class MonitorRingBufferTests: XCTestCase {
         ring.read(into: abl, frames: 64)
         XCTAssertEqual(out[0], 0)
         XCTAssertEqual(ring.availableFrames, 100)
+    }
+}
+
+@MainActor
+final class HiResControllerTests: XCTestCase {
+    private let headphones = AudioOutputDevice(uid: "bt", name: "Headphones", nominalSampleRate: 48_000)
+    private let virtual = AudioOutputDevice(uid: HiResDevice.uid, name: HiResDevice.name, nominalSampleRate: 44_100)
+
+    private func makeController() throws -> (HiResController, FakeOutputSystem, HiResSettings) {
+        let system = FakeOutputSystem(devices: [headphones, virtual], defaultUID: "bt")
+        let suite = "HiResControllerTests-\(UUID())"
+        let settings = HiResSettings(defaults: try XCTUnwrap(UserDefaults(suiteName: suite)))
+        settings.isEnabled = true
+        let store = HiResRestoreStore(defaults: try XCTUnwrap(UserDefaults(suiteName: suite + "-store")))
+        return (HiResController(settings: settings, system: system, store: store), system, settings)
+    }
+
+    private func stereoFloat(_ rate: Double) throws -> CaptureFormat {
+        try CaptureFormat(validating: AudioStreamBasicDescription(
+            mSampleRate: rate, mFormatID: kAudioFormatLinearPCM, mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 8, mFramesPerPacket: 1, mBytesPerFrame: 8, mChannelsPerFrame: 2, mBitsPerChannel: 32, mReserved: 0))
+    }
+
+    func testArmedToggleOffThenStopUnlocksSettingsAndRestoresTheOutput() throws {
+        let (controller, system, settings) = try makeController()
+        XCTAssertTrue(controller.beginRoute(sourceBundleID: nil))
+        XCTAssertTrue(controller.isRouted, "Settings are disabled while routed")
+        XCTAssertEqual(system.defaultUID, HiResDevice.uid)
+
+        settings.isEnabled = false
+        XCTAssertTrue(controller.isRouted, "turning Hi-Res off while armed takes effect at Stop")
+
+        var refreshed = false
+        withObservationTracking { _ = controller.isRouted } onChange: { refreshed = true }
+        controller.end()
+        XCTAssertTrue(refreshed, "views reading isRouted (the Settings section) are refreshed at Stop")
+        XCTAssertFalse(controller.isRouted, "Settings are enabled again")
+        XCTAssertFalse(settings.isEnabled)
+        XCTAssertEqual(system.defaultUID, "bt", "output restored")
+
+        XCTAssertFalse(controller.beginRoute(sourceBundleID: nil), "the next take stays off Hi-Res")
+        XCTAssertEqual(system.defaultUID, "bt")
+    }
+
+    func testMonitorFailureIsRetriedOnceBeforeItIsShown() throws {
+        let (controller, _, _) = try makeController()
+        controller.monitorRetryDelay = .milliseconds(50)
+        XCTAssertTrue(controller.beginRoute(sourceBundleID: nil))
+        controller.formatChanged(try stereoFloat(96_000))
+        XCTAssertNil(controller.message, "the first failure is retried, not shown")
+
+        let deadline = Date().addingTimeInterval(2)
+        while controller.message == nil, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        let message = try XCTUnwrap(controller.message)
+        XCTAssertTrue(message.hasPrefix("Monitor unavailable on Headphones: "), message)
+        XCTAssertTrue(message.hasSuffix(" The recording is not affected."), message)
+        controller.end()
+    }
+
+    func testStopCancelsAPendingMonitorRetry() throws {
+        let (controller, _, _) = try makeController()
+        controller.monitorRetryDelay = .milliseconds(50)
+        XCTAssertTrue(controller.beginRoute(sourceBundleID: nil))
+        controller.formatChanged(try stereoFloat(96_000))
+        controller.end()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertNil(controller.message)
     }
 }
