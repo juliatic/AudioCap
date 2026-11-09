@@ -121,7 +121,9 @@ final class HiResController {
     /// The Hi-Res route the next take of `sourceBundleID` would use, while idle with Hi-Res on and the driver installed.
     /// The rate is the fixed rate for Music too, because its track rate is only read when a take starts.
     func nextTake(sourceBundleID: String?) -> (monitor: AudioOutputDevice, rate: Double)? {
-        guard settings.isEnabled else { return nil }
+        // Read both so a view using this is refreshed when Hi-Res is turned off or the driver goes away.
+        let isEnabled = settings.isEnabled, isDriverAvailable = isDriverAvailable
+        guard isEnabled, isDriverAvailable else { return nil }
         let decision = HiResRatePolicy.decide(sourceBundleID: sourceBundleID, musicTrackRate: nil, fixedRate: settings.fixedRate)
         guard case .routed(let monitor, let rate) = router.nextRoute(rate: decision.rate) else { return nil }
         return (monitor, rate)
