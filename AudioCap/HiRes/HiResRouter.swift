@@ -37,6 +37,14 @@ final class HiResRouter {
     var rate: Double? { if case .routed(_, let rate) = state { rate } else { nil } }
     var isVirtualDeviceAvailable: Bool { system.device(uid: virtualUID) != nil }
 
+    /// What `route(rate:)` would do for the next take while idle: the Hi-Res device at `rate`, monitored on the current
+    /// real output. `nil` while routed or without the driver. Lets the UI describe the next take after Stop instead of
+    /// the restored physical output.
+    func nextRoute(rate: Double) -> State? {
+        guard state == .idle, isVirtualDeviceAvailable, let monitor = currentRealOutput() else { return nil }
+        return .routed(monitor: monitor, rate: rate)
+    }
+
     /// Makes the Hi-Res device the system output at `rate`. Returns the real device that the monitor plays to.
     @discardableResult
     func route(rate: Double) throws -> AudioOutputDevice {
