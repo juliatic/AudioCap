@@ -1,166 +1,1373 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "%.1f s": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f s"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%.1f s" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f s"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f s"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f s"
           }
         }
       }
     },
-    "%lld dBFS": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld dBFS"
+    "%@ ch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ch"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld dBFS"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ can."
           }
         }
       }
     },
-    "All system audio": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All system audio"
+    "%@ is set to %@. It goes back to %@ when recording stops." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ is set to %2$@. It goes back to %3$@ when recording stops."
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Todo el audio del sistema"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ está a %2$@. Volverá a %3$@ al terminar la grabación."
           }
         }
       }
     },
-    "Close take after silence": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Close take after silence"
+    "%lld dBFS" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld dBFS"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cerrar la toma tras un silencio de"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld dBFS"
           }
         }
       }
     },
-    "Manual": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manual"
+    "24-bit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24-bit"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manual"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 bits"
           }
         }
       }
     },
-    "Recording mode": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recording mode"
+    "256 kbps" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "256 kbps"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modo de grabación"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "256 kbps"
           }
         }
       }
     },
-    "Sound threshold": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sound threshold"
+    "32-bit float" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "32-bit float"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Umbral de sonido"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "32 bits en coma flotante"
           }
         }
       }
     },
-    "Start arms the recorder: a take opens when sound arrives, with half a second of pre-roll, and closes after the silence below. Stop disarms.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start arms the recorder: a take opens when sound arrives, with half a second of pre-roll, and closes after the silence below. Stop disarms."
+    "A file named “%@” already exists." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A file named “%@” already exists."
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Iniciar deja la grabadora a la espera: la toma empieza cuando llega sonido, con medio segundo previo, y se cierra tras el silencio indicado abajo. Detener la desactiva."
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya existe un archivo llamado «%@»."
           }
         }
       }
     },
-    "Wait for sound": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wait for sound"
+    "AAC is lossy: choose WAV, FLAC or ALAC to keep every sample" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AAC is lossy: choose WAV, FLAC or ALAC to keep every sample"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esperar sonido"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AAC tiene pérdidas: elige WAV, FLAC o ALAC para conservar cada muestra"
           }
         }
       }
     },
-    "Waiting for sound…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Waiting for sound…"
+    "Actions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actions"
           }
         },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Esperando sonido…"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acciones"
+          }
+        }
+      }
+    },
+    "All system audio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All system audio"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo el audio del sistema"
+          }
+        }
+      }
+    },
+    "AudioCap quit before this take was finished. Retry the conversion to export what was captured." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AudioCap quit before this take was finished. Retry the conversion to export what was captured."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AudioCap se cerró antes de terminar esta toma. Reintenta la conversión para exportar lo que se capturó."
+          }
+        }
+      }
+    },
+    "Bit-perfect path" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bit-perfect path"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ruta bit a bit"
+          }
+        }
+      }
+    },
+    "Can't write to %@. Recordings are saved in Application Support instead." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't write to %@. Recordings are saved in Application Support instead."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede escribir en %@. Las grabaciones se guardan en Application Support."
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelar"
+          }
+        }
+      }
+    },
+    "Capture" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Captura"
+          }
+        }
+      }
+    },
+    "Captured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Captured"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capturada"
+          }
+        }
+      }
+    },
+    "Change…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar…"
+          }
+        }
+      }
+    },
+    "Choose" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir"
+          }
+        }
+      }
+    },
+    "Choose where AudioCap saves new recordings." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose where AudioCap saves new recordings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige dónde guarda AudioCap las grabaciones nuevas."
+          }
+        }
+      }
+    },
+    "Close Player" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Player"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrar el reproductor"
+          }
+        }
+      }
+    },
+    "Close take after silence" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close take after silence"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrar la toma tras un silencio de"
+          }
+        }
+      }
+    },
+    "Converting %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Converting %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Convirtiendo %@"
+          }
+        }
+      }
+    },
+    "Couldn't Complete the Action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't Complete the Action"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se ha podido completar la acción"
+          }
+        }
+      }
+    },
+    "Couldn't change the rate of %@: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't change the rate of %1$@: %2$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se ha podido cambiar la frecuencia de %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Decoded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decoded"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decodificada"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Listo"
+          }
+        }
+      }
+    },
+    "Done, but the file's length doesn't match the capture" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done, but the file's length doesn't match the capture"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Listo, pero la duración del archivo no coincide con la captura"
+          }
+        }
+      }
+    },
+    "Downmixed from %@ channels to stereo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downmixed from %@ channels to stereo"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mezclado de %@ canales a estéreo"
+          }
+        }
+      }
+    },
+    "Downmixed from %@ to %@ channels" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downmixed from %1$@ to %2$@ channels"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mezclado de %1$@ a %2$@ canales"
+          }
+        }
+      }
+    },
+    "Enter a name without “/” or “:”." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a name without “/” or “:”."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe un nombre sin «/» ni «:»."
+          }
+        }
+      }
+    },
+    "Expected formats; they are confirmed when recording starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expected formats; they are confirmed when recording starts."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formatos previstos; se confirman al empezar a grabar."
+          }
+        }
+      }
+    },
+    "Failed: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error: %@"
+          }
+        }
+      }
+    },
+    "File" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivo"
+          }
+        }
+      }
+    },
+    "Header" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Header"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cabecera"
+          }
+        }
+      }
+    },
+    "Length mismatch: players may stop early or keep playing past the shown length" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Length mismatch: players may stop early or keep playing past the shown length"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las duraciones no coinciden: los reproductores pueden pararse antes o seguir sonando después del final que muestran"
+          }
+        }
+      }
+    },
+    "Lengths match" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lengths match"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las duraciones coinciden"
+          }
+        }
+      }
+    },
+    "Level" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Level"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nivel"
+          }
+        }
+      }
+    },
+    "Lossless at %@ bits; choose WAV to keep the 32-bit float capture unchanged." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lossless at %@ bits; choose WAV to keep the 32-bit float capture unchanged."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin pérdidas a %@ bits; elige WAV para conservar intacta la captura en coma flotante de 32 bits."
+          }
+        }
+      }
+    },
+    "Manual" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual"
+          }
+        }
+      }
+    },
+    "Match output device rate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Match output device rate"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Igualar la frecuencia del dispositivo de salida"
+          }
+        }
+      }
+    },
+    "Monitoring on %@ at %@; this only affects what you hear, not the file." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monitoring on %1$@ at %2$@; this only affects what you hear, not the file."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escuchando en %1$@ a %2$@; esto solo afecta a lo que oyes, no al archivo."
+          }
+        }
+      }
+    },
+    "Monitoring on %@; this only affects what you hear, not the file." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monitoring on %@; this only affects what you hear, not the file."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escuchando en %@; esto solo afecta a lo que oyes, no al archivo."
+          }
+        }
+      }
+    },
+    "Move to Trash" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move to Trash"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trasladar a la papelera"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre"
+          }
+        }
+      }
+    },
+    "No recordings yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recordings yet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay grabaciones."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aceptar"
+          }
+        }
+      }
+    },
+    "Open Folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir carpeta"
+          }
+        }
+      }
+    },
+    "Output device" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Output device"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispositivo de salida"
+          }
+        }
+      }
+    },
+    "Pause" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausa"
+          }
+        }
+      }
+    },
+    "Peak %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peak %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pico %@"
+          }
+        }
+      }
+    },
+    "Play" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reproducir"
+          }
+        }
+      }
+    },
+    "Quality" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quality"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calidad"
+          }
+        }
+      }
+    },
+    "Recording" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grabando"
+          }
+        }
+      }
+    },
+    "Recording mode" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording mode"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo de grabación"
+          }
+        }
+      }
+    },
+    "Recording through the AudioCap Hi-Res device, so the output hardware doesn't limit the rate." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording through the AudioCap Hi-Res device, so the output hardware doesn't limit the rate."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grabando a través del dispositivo AudioCap Hi-Res, así que el hardware de salida no limita la frecuencia."
+          }
+        }
+      }
+    },
+    "Recordings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grabaciones"
+          }
+        }
+      }
+    },
+    "Rename" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar nombre"
+          }
+        }
+      }
+    },
+    "Rename Recording" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename Recording"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar nombre de la grabación"
+          }
+        }
+      }
+    },
+    "Rename…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar nombre…"
+          }
+        }
+      }
+    },
+    "Resampled from %@ to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resampled from %1$@ to %2$@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remuestreado de %1$@ a %2$@"
+          }
+        }
+      }
+    },
+    "Resampled to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resampled to %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remuestreado a %@"
+          }
+        }
+      }
+    },
+    "Restore %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurar %@"
+          }
+        }
+      }
+    },
+    "Retry Conversion" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry Conversion"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentar la conversión"
+          }
+        }
+      }
+    },
+    "Save recordings in" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save recordings in"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar grabaciones en"
+          }
+        }
+      }
+    },
+    "Set the output device to the source's rate before recording, so nothing is resampled. The previous rate comes back when recording stops." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set the output device to the source's rate before recording, so nothing is resampled. The previous rate comes back when recording stops."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pon el dispositivo de salida a la frecuencia de la fuente antes de grabar para que no se remuestree nada. La frecuencia anterior vuelve al terminar la grabación."
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show in Finder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar en el Finder"
+          }
+        }
+      }
+    },
+    "Sound threshold" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sound threshold"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umbral de sonido"
+          }
+        }
+      }
+    },
+    "Start arms the recorder: a take opens when sound arrives, with half a second of pre-roll, and closes after the silence below. Stop disarms." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start arms the recorder: a take opens when sound arrives, with half a second of pre-roll, and closes after the silence below. Stop disarms."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Iniciar deja la grabadora a la espera: la toma empieza cuando llega sonido, con medio segundo previo, y se cierra tras el silencio indicado abajo. Detener la desactiva."
+          }
+        }
+      }
+    },
+    "Tap" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap"
+          }
+        }
+      }
+    },
+    "The file is resampled to %@ (AAC limit)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file is resampled to %@ (AAC limit)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo se remuestrea a %@ (límite de AAC)"
+          }
+        }
+      }
+    },
+    "The original capture is no longer on disk, so it can't be converted again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The original capture is no longer on disk, so it can't be converted again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La captura original ya no está en el disco, así que no se puede volver a convertir."
+          }
+        }
+      }
+    },
+    "The output device has %@ channels: multichannel audio may be downmixed to stereo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The output device has %@ channels: multichannel audio may be downmixed to stereo"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El dispositivo de salida tiene %@ canales: el audio multicanal puede mezclarse a estéreo"
+          }
+        }
+      }
+    },
+    "The recordings list couldn't be read, so it starts empty. Your files are untouched." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The recordings list couldn't be read, so it starts empty. Your files are untouched."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se ha podido leer la lista de grabaciones, así que empieza vacía. Tus archivos siguen intactos."
+          }
+        }
+      }
+    },
+    "The source app's volume, EQ, Sound Check and Spatial Audio change the samples before AudioCap gets them." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The source app's volume, EQ, Sound Check and Spatial Audio change the samples before AudioCap gets them."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El volumen, el ecualizador, el ajuste de volumen y el audio espacial de la app de origen cambian las muestras antes de que lleguen a AudioCap."
+          }
+        }
+      }
+    },
+    "The source doesn't report its own rate. If the track isn't %@, it is resampled before the tap: use Match output device rate." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The source doesn't report its own rate. If the track isn't %@, it is resampled before the tap: use Match output device rate."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La fuente no indica su frecuencia. Si la pista no está a %@, se remuestrea antes del tap: usa Igualar la frecuencia del dispositivo de salida."
+          }
+        }
+      }
+    },
+    "Use Music Folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Music Folder"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar la carpeta Música"
+          }
+        }
+      }
+    },
+    "Wait for sound" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait for sound"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperar sonido"
+          }
+        }
+      }
+    },
+    "Wait until this take has finished recording and converting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait until this take has finished recording and converting."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espera a que esta toma termine de grabarse y convertirse."
+          }
+        }
+      }
+    },
+    "Waiting for sound…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for sound…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando sonido…"
+          }
+        }
+      }
+    },
+    "Waveform" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waveform"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forma de onda"
           }
         }
       }
     }
   },
-  "version": "1.0"
+  "version" : "1.0"
 }

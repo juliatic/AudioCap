@@ -23,7 +23,8 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 5. **Serial writer** (only owner of the file) writes a **CAF** capture.
 6. **Stop**: close the file, check frame count against the header.
 7. **Export** to WAV Float32, FLAC 24-bit, ALAC or AAC 256, then a **duration check**.
-8. Planned: **library + player**; **Hi-Res** virtual output device with a separate **monitor** on the real speakers.
+8. **Library**: the JSON index tracks every take; the built-in **player** reads the file back and shows header vs decoded length. **Quality panel** shows tap, device and file formats.
+9. Planned: **Hi-Res** virtual output device with a separate **monitor** on the real speakers.
 
 | Stage | What it does | Status |
 |-------|--------------|--------|
@@ -37,7 +38,9 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 | Auto-record ("Wait for sound", the default mode) | `AutoRecord/AutoRecordMachine` (pure, idle/armed/recording/closing): a take opens on the first buffer with RMS above −60 dBFS and starts with a 0.5 s pre-roll; RMS at or below the threshold for 2 s (configurable) closes it, keeping a 0.5 s tail, then re-arms. Stop disarms. Manual mode writes from the first buffer. | PR 3 |
 | "All system audio" source | `AudioProcess.allSystemAudio` → `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object | PR 3 |
 | Source list refresh for audio-only processes | `AudioProcessListMonitor` (CoreAudio process-list + is-running-output listeners, off the main actor, coalesced) | PR 3 |
-| Library + player, level meter, output folder `~/Music/AudioCap`, Quality panel | | planned (PR 4) |
+| Library + player | `RecordingLibrary` follows `takeEvents()`, saves `library.json` in Application Support, reads each file back with `AudioFileInspector` (header, decoded and WAV/CAF payload frames, peak); `PlayerView` plays, scrubs and draws the waveform | PR 4 |
+| Level meter, output folder | `LevelMeterView` (peak, RMS, 1.5 s hold); `OutputFolder`: `~/Music/AudioCap` or a picked folder kept with a security-scoped bookmark | PR 4 |
+| Quality panel | `QualityPathBuilder` → `QualityPath` → `QualityAssessment` (badge, warnings, notes); `QualityPathContributor` is the hook for PR 6; `DeviceRateMatcher` sets the output rate only on request and restores it | PR 4 |
 | Bilingual UI (String Catalog), ≥ 16 pt | | planned (PR 5) |
 | Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | | planned (PR 6) |
 
@@ -93,7 +96,10 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 - The tap sees audio **after** the app's volume, EQ, Sound Check and Spatial Audio, and `stereoMixdownOfProcesses` folds surround to stereo.
 - `./start.sh` installs into `/Applications/AudioCap.app`: it quits a running AudioCap (Apple Event `quit`, 10 s, then `pkill -x AudioCap`), replaces the old copy only after a successful build, and asks once for sudo (or stops with a clear message) when `/Applications` is not writable.
 - Changing the bundle id or ad-hoc re-signing can make macOS ask for the audio-capture permission again the first time the rebuilt app runs from `/Applications`. Reset it with `tccutil reset AudioCapture <bundle id>`.
-- The upstream sandboxed build saves to `~/Library/Containers/codes.rambo.samplecode.AudioCap/Data/Library/Application Support/AudioCap`; the plan moves output to `~/Music/AudioCap` (PR 4).
+- Output goes to `~/Music/AudioCap` (entitlement `com.apple.security.assets.music.read-write`). Resolve it from `getpwuid`, not `FileManager.homeDirectoryForCurrentUser`, which points into the sandbox container. A picked folder needs an app-scoped bookmark (`com.apple.security.files.bookmarks.app-scope`); earlier picked folders stay in `AC_KnownFolderBookmarks` so old takes keep playing. The library index stays in the container's Application Support (`library.json`).
+- **`AVAudioFile.length` and `AVAudioPlayer.duration` trust the header.** A WAV whose `data` size is too small reports the short length and reads stop there. `AudioFileInspector.pcmPayloadFrames` counts the bytes actually on disk, which is how the player shows a mismatch.
+- **Changing an output device's nominal rate moves the aggregate with it, but the running capture is not rebuilt.** That is why "Match output device rate" is disabled while recording. On a BlackHole test device, `kAudioTapPropertyFormat` kept reporting the old rate after the change, so the panel then warns about resampling; check this on real hardware before trusting either value.
+- The rate matcher saves the original rate in `AC_PendingRateRestore` and restores it when recording stops, when the app quits and on the next launch after a crash.
 
 ## Skills
 

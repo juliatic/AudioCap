@@ -32,8 +32,8 @@ struct RecordingView: View {
                 Spacer()
 
                 if recorder.isRecording {
-                    LevelMeter(level: recorder.level)
-                        .frame(width: 120, height: 6)
+                    LevelMeterView(level: recorder.level)
+                        .frame(width: 240)
                     Text(timeString(recorder.framesWritten))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -122,14 +122,6 @@ struct RecordingView: View {
                     .contentTransition(.identity)
             }
         }
-
-        if !recorder.takes.isEmpty {
-            Section("Takes") {
-                ForEach(recorder.takes.reversed()) { take in
-                    TakeRow(take: take)
-                }
-            }
-        }
     }
 
     private var headerTitle: String {
@@ -158,68 +150,5 @@ struct RecordingView: View {
                 Diagnostics.copyToPasteboard(recorder.diagnosticsReport())
             }
         }
-    }
-}
-
-private struct TakeRow: View {
-    let take: RecordingTake
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(take.outputURL.lastPathComponent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("\(take.captureFormatDescription) → \(take.outputFormat.displayName) · \(String(format: "%.3f s", take.duration))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let warning = take.warning {
-                    Text(warning)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .textSelection(.enabled)
-                }
-                if case .failed(let message) = take.status {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer()
-            switch take.status {
-            case .recording:
-                Text("Recording").foregroundStyle(.red)
-            case .exporting(let progress):
-                ProgressView(value: progress)
-                    .frame(width: 80)
-            case .completed:
-                Button("Show in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([take.outputURL])
-                }
-            case .failed:
-                Button("Show Capture") {
-                    NSWorkspace.shared.activateFileViewerSelecting([take.captureURL])
-                }
-            }
-        }
-    }
-}
-
-private struct LevelMeter: View {
-    let level: AudioLevel
-
-    var body: some View {
-        GeometryReader { proxy in
-            let fraction = max(0, min(1, (level.peakDb + 60) / 60))
-            ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule()
-                    .fill(level.peakDb > -1 ? Color.red : Color.green)
-                    .frame(width: proxy.size.width * fraction)
-            }
-        }
-        .accessibilityLabel(Text("Level"))
-        .accessibilityValue(Text(String(format: "%.0f dB", level.peakDb)))
     }
 }
