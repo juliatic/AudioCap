@@ -92,7 +92,7 @@ Cómo comprobarlo en tu propio Mac (prueba de nulo y comprobación de duración)
 
 ## Solución de problemas
 
-- [Guía de solución de problemas](docs/troubleshooting.es.md): códigos de error descifrados (`'fmt?'`, `'!obj'`…), cómo restablecer el permiso, dónde se guardan los archivos y qué hacer si salen vacíos o cortos.
+- [Guía de solución de problemas](docs/troubleshooting.es.md): códigos de error descifrados (`'fmt?'`, `'!obj'`…), cómo restablecer el permiso, dónde se guardan los archivos, qué hacer si salen vacíos o cortos y por qué una toma puede avisar de un corte de golpe donde el original se corta de verdad (AudioCap no puede distinguirlo de que CoreAudio entregue ceros).
 - [Notas sobre los taps de proceso de CoreAudio](docs/coreaudio-taps.md) para desarrolladores (en inglés).
 - Si quieres colaborar, o eres una herramienta de IA, empieza por [`AGENTS.md`](AGENTS.md).
 

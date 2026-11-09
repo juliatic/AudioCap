@@ -92,7 +92,7 @@ How to prove it on your own Mac (null test, duration check): [`.agents/skills/au
 
 ## Troubleshooting
 
-- [Troubleshooting guide](docs/troubleshooting.md): decoded error codes (`'fmt?'`, `'!obj'`…), resetting the permission, where files are saved, empty or short files.
+- [Troubleshooting guide](docs/troubleshooting.md): decoded error codes (`'fmt?'`, `'!obj'`…), resetting the permission, where files are saved, empty or short files, and why a take can warn of an abrupt cut where the source really cuts hard (AudioCap cannot tell that from CoreAudio delivering zeros).
 - [CoreAudio process-tap notes](docs/coreaudio-taps.md) for developers.
 - Contributors and AI tools: start with [`AGENTS.md`](AGENTS.md).
 
