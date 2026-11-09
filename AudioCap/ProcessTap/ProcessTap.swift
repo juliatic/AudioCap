@@ -77,6 +77,8 @@ final class ProcessTap {
     @ObservationIgnored private var listeners: [AudioPropertyListener] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     @ObservationIgnored private var pendingRebuild: DispatchWorkItem?
+    /// Executable of the source, for recognizing a relaunch of a process without a bundle ID (e.g. `afplay`).
+    @ObservationIgnored private var sourceExecutablePath: String?
 
     @ObservationIgnored
     private(set) var activated = false
@@ -141,6 +143,7 @@ final class ProcessTap {
 
         guard isSourceAvailable else { return nil }
         do {
+            try refreshIdleTap()
             return try startIO()
         } catch {
             wantsRunning = false
@@ -156,6 +159,15 @@ final class ProcessTap {
         wantsRunning = false
         eventHandler = nil
         stopIO()
+    }
+
+    /// A tap left idle between selection and Start can deliver only zeros for a source that is already playing
+    /// (seen at 48 kHz with `afplay` after ~40 s idle), so each Start uses a freshly created tap and aggregate.
+    private func refreshIdleTap() throws {
+        guard deviceProcID == nil, processTapID.isValid else { return }
+        pendingRebuild?.cancel()
+        destroyAggregateAndTap()
+        try prepare(for: process.objectID)
     }
 
     private func startIO() throws -> CaptureFormat {
@@ -274,6 +286,7 @@ final class ProcessTap {
 
         self.processTapID = tapID
         self.tapUUID = tapDescription.uuid
+        if let path = objectID.readProcessExecutablePath() { sourceExecutablePath = path }
         self.tapStreamDescription = try? tapID.readAudioTapStreamBasicDescription()
 
         try createAggregateDevice()
@@ -441,9 +454,11 @@ final class ProcessTap {
             return
         }
 
-        guard let bundleID = process.bundleID,
-              let objectID = objects.first(where: { $0.readProcessBundleID() == bundleID }) else { return }
-        logger.info("Source process relaunched: \(bundleID, privacy: .public)")
+        guard let objectID = objects.first(where: {
+            Self.isRelaunch(bundleID: process.bundleID, executablePath: sourceExecutablePath,
+                            candidateBundleID: $0.readProcessBundleID(), candidatePath: $0.readProcessExecutablePath())
+        }) else { return }
+        logger.info("Source process relaunched: \(self.process.bundleID ?? self.sourceExecutablePath ?? "?", privacy: .public)")
         process.objectID = objectID
         if let pid = objectID.readProcessPID() { process.id = pid }
         do {
@@ -459,6 +474,14 @@ final class ProcessTap {
             isSourceAvailable = true
             if wantsRunning { eventHandler?(.failed(error)) }
         }
+    }
+
+    /// Whether a process object is a relaunch of the source: same bundle ID, or, for processes without one
+    /// (command-line players such as `afplay`), the same executable.
+    nonisolated static func isRelaunch(bundleID: String?, executablePath: String?, candidateBundleID: String?, candidatePath: String?) -> Bool {
+        if let bundleID { return candidateBundleID == bundleID }
+        guard let executablePath else { return false }
+        return candidateBundleID == nil && candidatePath == executablePath
     }
 
     deinit { invalidate() }

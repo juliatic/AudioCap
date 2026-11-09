@@ -35,6 +35,14 @@ extension AudioObjectID {
         (try? read(kAudioProcessPropertyPID, defaultValue: pid_t(-1))).flatMap { $0 > 0 ? $0 : nil }
     }
 
+    /// The executable path of a process object, used to recognize a relaunch of a process that has no bundle ID.
+    func readProcessExecutablePath() -> String? {
+        guard let pid = readProcessPID() else { return nil }
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(cString: buffer) : nil
+    }
+
     /// `kAudioProcessPropertyIsRunningOutput`: the process is currently playing audio.
     func readProcessIsRunningOutput() -> Bool {
         (try? readBool(kAudioProcessPropertyIsRunningOutput)) ?? false
