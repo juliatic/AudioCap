@@ -13,7 +13,7 @@ final class PlayerModel {
     private(set) var analysis: FileAnalysis?
     private(set) var errorMessage: String?
 
-    @ObservationIgnored private var player: AVAudioPlayer?
+    @ObservationIgnored private var player: OutputOnlyPlayer?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var analysisTask: Task<Void, Never>?
 
@@ -24,8 +24,7 @@ final class PlayerModel {
         entryID = entry.id
         analysis = entry.analysis
         do {
-            let player = try AVAudioPlayer(contentsOf: entry.fileURL)
-            player.prepareToPlay()
+            let player = try OutputOnlyPlayer(url: entry.fileURL)
             self.player = player
             playerDuration = player.duration
         } catch {
@@ -62,9 +61,12 @@ final class PlayerModel {
         if player.isPlaying {
             player.pause()
         } else {
-            if player.currentTime >= player.duration - 0.01 { player.currentTime = 0 }
-            player.play()
-            startTimer()
+            do {
+                try player.play()
+                startTimer()
+            } catch {
+                errorMessage = error.audioCapDescription
+            }
         }
         refresh()
     }
@@ -84,6 +86,7 @@ final class PlayerModel {
 
     private func refresh() {
         guard let player else { return }
+        player.checkEngine()
         currentTime = player.currentTime
         isPlaying = player.isPlaying
         if !player.isPlaying {

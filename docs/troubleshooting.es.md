@@ -25,9 +25,7 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 
 ## Permiso
 
-AudioCap necesita el permiso de **grabación de audio del sistema**. La primera vez, macOS pregunta si AudioCap puede grabar el audio del sistema: pulsa **Permitir**. Al empezar a grabar, macOS también puede pedir acceso al micrófono.
-
-![Aviso de micrófono al empezar a grabar](images/en/microphone-prompt.png)
+AudioCap necesita el permiso de **grabación de audio del sistema**. La primera vez, macOS pregunta si AudioCap puede grabar el audio del sistema: pulsa **Permitir**.
 
 Si pulsaste **No permitir** o el aviso no aparece:
 
