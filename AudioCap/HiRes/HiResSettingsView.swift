@@ -9,6 +9,7 @@ struct HiResSettingsView: View {
         Form {
             Section {
                 Toggle("Hi-Res mode", isOn: $settings.isEnabled)
+                    .onChange(of: settings.isEnabled) { controller.logEnabledChanged() }
                 Text("While recording, apps play into the silent AudioCap Hi-Res device at a high sample rate, and AudioCap plays a copy on your speakers or headphones. Only that copy is resampled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -126,6 +126,12 @@ final class HiResController {
         return (monitor, rate)
     }
 
+    /// Turning Hi-Res off mid-session takes effect at the next Start; a routed session stays routed until Stop.
+    func logEnabledChanged() {
+        let route = router.rate.map { "routed at \($0) Hz until Stop" } ?? "not routed"
+        logger.info("Hi-Res mode turned \(self.settings.isEnabled ? "on" : "off", privacy: .public) (\(route, privacy: .public))")
+    }
+
     var diagnosticsLines: [String] {
         var lines = ["Hi-Res: enabled \(settings.isEnabled), driver \(isDriverAvailable ? "available" : "missing"), fixed rate \(settings.fixedRate) Hz"]
         if let rate = router.rate { lines.append("Hi-Res routed at \(rate) Hz (\(rateDecision.map { "\($0.source)" } ?? "-")), monitor: \(monitorDevice?.name ?? "-") at \(monitorOutputRate.map { "\($0) Hz" } ?? "-")") }
