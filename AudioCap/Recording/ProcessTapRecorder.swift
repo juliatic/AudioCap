@@ -70,7 +70,9 @@ final class ProcessTapRecorder {
     @ObservationIgnored private var pipeline: CapturePipeline?
     @ObservationIgnored private var session: SessionSettings?
     @ObservationIgnored private var meterTimer: Timer?
-    @ObservationIgnored private var silenceRecovery = SilenceRecovery.none
+    @ObservationIgnored private var silenceGuard = DigitalSilenceGuard(seconds: ProcessTapRecorder.digitalSilenceRecoverySeconds)
+    /// A non-zero sample arrived since `start()` (in any take or pipeline).
+    @ObservationIgnored private var sessionHasSignal = false
     /// I/O cycles that arrived while no pipeline was attached (between takes or while gated).
     @ObservationIgnored private let unattachedCycles = AtomicCounter()
     @ObservationIgnored private var eventContinuations: [UUID: AsyncStream<TakeEvent>.Continuation] = [:]
@@ -89,14 +91,6 @@ final class ProcessTapRecorder {
         var monitorRing: MonitorRingBuffer?
         /// Buffers between `.willReconfigure` and the next event are not valid.
         var isGated = false
-    }
-
-    private enum SilenceRecovery: Equatable {
-        case none
-        /// The tap was recreated at this time because of digital silence.
-        case recreated(Date)
-        /// Recreating did not help; the warning stays until sound arrives.
-        case gaveUp
     }
 
     init(tap: ProcessTap, outputDirectory: URL = .applicationSupport, settings: RecordingSettings = .shared) {
@@ -130,8 +124,9 @@ final class ProcessTapRecorder {
         }
         guard let tap else { throw "The process tap is not available." }
         lastError = nil
+        silenceGuard.reset()
         silenceWarning = nil
-        silenceRecovery = .none
+        sessionHasSignal = false
         session = SessionSettings(outputFormat: settings.outputFormat, autoSplit: settings.autoSplitOnSilence,
                                   thresholdDb: settings.silenceThresholdDb, minSilenceDuration: settings.minSilenceDuration)
         HiResController.shared.begin(for: tap)
@@ -179,7 +174,11 @@ final class ProcessTapRecorder {
     private func handle(_ event: ProcessTap.Event) {
         switch event {
         case .willReconfigure:
-            ioQueue.sync { io.isGated = true }
+            ioQueue.sync {
+                io.isGated = true
+                // The restarted device has a new sample timeline; that is a reconnect, not a lost-audio jump.
+                io.pipeline?.noteReconnect()
+            }
         case .willStart(let format):
             // Install the pipeline before AudioDeviceStart so the first I/O cycles are kept.
             setFormat(format)
@@ -332,32 +331,19 @@ final class ProcessTapRecorder {
         checkDigitalSilence(pipeline)
     }
 
-    /// Guards against a tap that delivers only zeros (seen right after the permission is granted): if the source
-    /// reports that it is playing but every sample has been 0 for a while, recreate the tap once, then warn.
+    /// Guards against a capture that never delivers signal (seen right after the permission is granted).
+    /// See `DigitalSilenceGuard`: it only acts until the first non-zero sample of the session.
     @MainActor
     private func checkDigitalSilence(_ pipeline: CapturePipeline) {
+        if pipeline.hasSeenSignal { sessionHasSignal = true }
         let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
-        guard silentSeconds >= Self.digitalSilenceRecoverySeconds else {
-            if silentSeconds == 0, silenceWarning != nil {
-                silenceWarning = nil
-                silenceRecovery = .none
-            }
-            return
-        }
-        guard let tap, tap.isSourceOutputting else { return }
-        let name = process.name
-        switch silenceRecovery {
-        case .none:
-            logger.warning("Digital silence for \(silentSeconds, privacy: .public) s while the source is playing; recreating the tap")
-            silenceRecovery = .recreated(Date())
-            silenceWarning = "\(name) is playing but the capture is silent. Reconnecting to it…"
-            tap.recreateTap(reason: "digital silence while the source is playing")
-        case .recreated(let date):
-            guard Date().timeIntervalSince(date) >= Self.digitalSilenceRecoverySeconds * 2 else { return }
-            silenceRecovery = .gaveUp
-            silenceWarning = "\(name) is playing but AudioCap only receives silence. Check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again."
-        case .gaveUp:
-            break
+        let wasArmed = silenceGuard.state != .disarmed
+        let action = silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
+                                         sourceIsPlaying: wasArmed && (tap?.isSourceOutputting ?? false), sourceName: process.name)
+        if silenceWarning != silenceGuard.warning { silenceWarning = silenceGuard.warning }
+        if action == .reconnect, let tap {
+            logger.warning("No signal for \(silentSeconds, privacy: .public) s since the capture started while the source is playing; recreating the tap")
+            tap.recreateTap(reason: "no signal since the capture started")
         }
     }
 
@@ -366,6 +352,8 @@ final class ProcessTapRecorder {
         meterTimer = nil
         level = .silence
         framesWritten = 0
+        silenceGuard.reset()
+        silenceWarning = nil
     }
 
     private func uniqueBaseName() -> String {

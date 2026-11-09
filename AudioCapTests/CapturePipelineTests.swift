@@ -109,6 +109,35 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         XCTAssertTrue(try XCTUnwrap(collector.closed.first).warning?.contains("256 frames") == true)
     }
 
+    func testReconnectIsNotReportedAsATimelineJump() throws {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 10, sizes: [512], start: &next, sampleTime: &sampleTime)
+        pipeline.noteReconnect()
+        sampleTime = 0 // a restarted device starts a new timeline
+        feed(pipeline, cycles: 10, sizes: [512], start: &next, sampleTime: &sampleTime)
+        pipeline.finish()
+        let warning = try XCTUnwrap(collector.closed.first?.warning)
+        XCTAssertFalse(warning.contains("timeline jumped"))
+        XCTAssertTrue(warning.contains("reconnected 1 time"))
+        XCTAssertEqual(pipeline.discontinuities.load(ordering: .relaxed), 0)
+    }
+
+    func testSignalIsRemembered() {
+        let collector = Collector()
+        let pipeline = makePipeline(collector)
+        var next = 0
+        var sampleTime = 0.0
+        feed(pipeline, cycles: 5, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        XCTAssertFalse(pipeline.hasSeenSignal)
+        feed(pipeline, cycles: 1, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0.25 }
+        feed(pipeline, cycles: 5, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        XCTAssertTrue(pipeline.hasSeenSignal)
+        pipeline.finish()
+    }
+
     func testDigitalSilenceTakeIsFlagged() throws {
         let collector = Collector()
         let pipeline = makePipeline(collector)
