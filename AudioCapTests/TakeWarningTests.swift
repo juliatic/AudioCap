@@ -78,6 +78,28 @@ final class TakeWarningTests: XCTestCase {
                        "La mayor parte de esta toma tras su primer sonido son ceros digitales (\(zeros) s de \(span) s) mientras afplay sonaba. Salvo que ese pasaje fuera realmente silencioso, CoreAudio entregó ceros en lugar de su audio y ese audio falta en la toma.")
     }
 
+    func testAbruptEdgeAndSplitRendering() throws {
+        let t = 9.661.formatted(.number.precision(.fractionLength(3)))
+        let gap = 10.2.formatted(.number.precision(.fractionLength(3)))
+        let source = TakeSource.app(name: "afplay")
+        XCTAssertEqual(TakeWarning.abruptEnd(atSeconds: 9.661).text(source: source),
+                       "Audio stopped abruptly at \(t) s while afplay was playing; the rest may be missing.")
+        XCTAssertEqual(TakeWarning.abruptEnd(atSeconds: 9.661).text(source: source, bundle: try spanish),
+                       "El audio se cortó de golpe a los \(t) s mientras afplay sonaba; puede faltar el resto.")
+        XCTAssertEqual(TakeWarning.abruptStart(atSeconds: 9.661).text(source: source),
+                       "Audio started abruptly mid-waveform at \(t) s while afplay was playing; the start may be missing.")
+        XCTAssertEqual(TakeWarning.abruptStart(atSeconds: 9.661).text(source: source, bundle: try spanish),
+                       "El audio empezó de golpe, a mitad de onda, a los \(t) s mientras afplay sonaba; puede faltar el principio.")
+        XCTAssertEqual(TakeWarning.splitFromPrevious(gapSeconds: 10.2).text(source: source),
+                       "This take and the previous one may be one passage split by a CoreAudio dropout; \(gap) s between them (digital zeros while afplay was playing) are not in either take.")
+        XCTAssertEqual(TakeWarning.splitFromPrevious(gapSeconds: 10.2).text(source: source, bundle: try spanish),
+                       "Esta toma y la anterior pueden ser un mismo pasaje partido por un corte de CoreAudio; los \(gap) s entre ambas (ceros digitales mientras afplay sonaba) no están en ninguna de las dos.")
+        XCTAssertEqual(TakeWarning.splitIntoNext(gapSeconds: 10.2).text(source: source, bundle: try spanish),
+                       "Esta toma y la siguiente pueden ser un mismo pasaje partido por un corte de CoreAudio; los \(gap) s entre ambas (ceros digitales mientras afplay sonaba) no están en ninguna de las dos.")
+        let data = try JSONEncoder().encode([TakeWarning.splitIntoNext(gapSeconds: 10.2), .abruptEnd(atSeconds: 9.661)])
+        XCTAssertEqual(try JSONDecoder().decode([TakeWarning].self, from: data), [.splitIntoNext(gapSeconds: 10.2), .abruptEnd(atSeconds: 9.661)])
+    }
+
     func testLegacyLibraryEntryMigratesAndIsRewrittenAsCodes() throws {
         let asbd = AudioStreamBasicDescription(mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
                                                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,

@@ -99,6 +99,18 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         XCTAssertEqual(entry.warnings, [.reconnected(count: 2)])
     }
 
+    func testWarningAmendedOnADoneTakeIsSaved() throws {
+        let library = RecordingLibrary(indexURL: indexURL)
+        var recorded = try take(status: .completed, frames: 48_000)
+        library.apply(.added(recorded))
+        recorded.warnings.append(.splitIntoNext(gapSeconds: 0.25))
+        library.apply(.updated(recorded))
+
+        let entry = try XCTUnwrap(RecordingLibrary(indexURL: indexURL).entries.first)
+        XCTAssertEqual(entry.status, .done)
+        XCTAssertEqual(entry.warnings, [.splitIntoNext(gapSeconds: 0.25)])
+    }
+
     func testRecorderEventsDriveStatusAndLateProgressIsIgnored() async throws {
         let library = RecordingLibrary(indexURL: indexURL)
         var recorded = try take()

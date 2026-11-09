@@ -68,10 +68,12 @@ final class RecordingLibrary {
             let status = LibraryEntry.Status(take.status)
             guard LibraryEntry.Status.canTransition(from: entries[index].status, to: status) else { return }
             let old = entries[index].status
+            let oldWarnings = entries[index].warnings
             entries[index].update(from: take)
             entries[index].status = status
-            // Progress updates arrive many times a second; only write the index when the state changes.
-            if !Self.sameKind(old, status) { save() }
+            // Progress updates arrive many times a second; only write the index when the state or the warnings change
+            // (a closed take's warnings can be amended later, for example when the next take turns out to be split from it).
+            if !Self.sameKind(old, status) || entries[index].warnings != oldWarnings { save() }
             if case .done = status, !Self.sameKind(old, status) { analyze(take.id) }
         case .removed(let id):
             entries.removeAll { $0.id == id }

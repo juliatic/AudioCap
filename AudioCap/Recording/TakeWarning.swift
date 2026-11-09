@@ -33,6 +33,14 @@ enum TakeWarning: Codable, Hashable, Sendable {
     case startMayBeLate(seconds: Double)
     /// More than half of the take after its first sound is digital zero while the source was playing.
     case mostlyZero(zeroSeconds: Double, spanSeconds: Double)
+    /// The take's first sound starts mid-waveform right after exact zeros while the source was playing.
+    case abruptStart(atSeconds: Double)
+    /// The take's sound stops mid-waveform into exact zeros while the source kept playing.
+    case abruptEnd(atSeconds: Double)
+    /// This take starts abruptly after the previous one ended abruptly, with the source playing in between.
+    case splitFromPrevious(gapSeconds: Double)
+    /// The next take starts abruptly after this one ended abruptly, with the source playing in between.
+    case splitIntoNext(gapSeconds: Double)
     /// Free text from an index written before warnings were codes, when it matches no known warning.
     case legacyText(text: String)
 
@@ -59,6 +67,22 @@ enum TakeWarning: Codable, Hashable, Sendable {
             let zeroText = zeroSeconds.formatted(.number.precision(.fractionLength(3)))
             let spanText = spanSeconds.formatted(.number.precision(.fractionLength(3)))
             return String(localized: "Most of this take after its first sound is digital zero (\(zeroText) s of \(spanText) s) while \(sourceName) was playing. Unless that passage was really silent, CoreAudio delivered zeros instead of its audio and that audio is missing from the take.", bundle: bundle)
+        case .abruptStart(let atSeconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let atText = atSeconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "Audio started abruptly mid-waveform at \(atText) s while \(sourceName) was playing; the start may be missing.", bundle: bundle)
+        case .abruptEnd(let atSeconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let atText = atSeconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "Audio stopped abruptly at \(atText) s while \(sourceName) was playing; the rest may be missing.", bundle: bundle)
+        case .splitFromPrevious(let gapSeconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let gapText = gapSeconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "This take and the previous one may be one passage split by a CoreAudio dropout; \(gapText) s between them (digital zeros while \(sourceName) was playing) are not in either take.", bundle: bundle)
+        case .splitIntoNext(let gapSeconds):
+            let sourceName = source.displayName(bundle: bundle)
+            let gapText = gapSeconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "This take and the next one may be one passage split by a CoreAudio dropout; \(gapText) s between them (digital zeros while \(sourceName) was playing) are not in either take.", bundle: bundle)
         case .legacyText(let text):
             return text
         }

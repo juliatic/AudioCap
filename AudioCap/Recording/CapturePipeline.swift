@@ -41,6 +41,8 @@ final class CapturePipeline: @unchecked Sendable {
         case discarded(RecordingTake.ID)
         /// The capture file could not be created.
         case failed(String)
+        /// A warning found after an earlier take had closed: it and a later take may be one split passage.
+        case amended(RecordingTake.ID, warning: TakeWarning)
     }
 
     let format: CaptureFormat
@@ -68,6 +70,10 @@ final class CapturePipeline: @unchecked Sendable {
     private let phaseCode = Atomic<Int>(0)
     /// Silence splitting (manual mode only); "Wait for sound" closes takes by itself.
     private let splitEnabled = Atomic<Bool>(true)
+    /// Exact-zero frames of split silence that were not written, since the last take opened.
+    let splitSilenceZeroFrames = Atomic<Int>(0)
+    /// The source stopped during split silence that was not written, since the last take opened.
+    let splitSilenceSourceStopped = Atomic<Bool>(false)
     /// Reconnects (device rebuilds, tap recreation) during the current take.
     let reconnects = Atomic<Int>(0)
     /// Dropouts: runs of all-zero I/O cycles that cut into signal and end with an abrupt return of signal, at most
@@ -136,6 +142,16 @@ final class CapturePipeline: @unchecked Sendable {
     /// Uncaptured frames of the refresh the take's onset followed, if any.
     private var takeLateStartFrames: Int?
     private var takeZeros = ZeroSpanMeter()
+    private var takeEdges = PassageEdges(sampleRate: 48_000)
+    /// Frames read while no take was open, since the last take closed.
+    private var framesWithoutTake = 0
+    /// `framesWithoutTake` when the current take opened, and the frames the take received in that same drain step
+    /// (auto-record's pre-roll and trigger chunk, which were read before the take opened).
+    private var takeFramesBeforeOpen = 0
+    private var takeOpeningFrames: Int?
+    /// The last take ended with an abrupt cut while the source played; the next take may continue its passage.
+    private var pendingSplit: (id: RecordingTake.ID, trailingZeros: Int)?
+    private var lastTakeTrailingZeros = 0
     private var pendingLateStart: CaptureTimelineLog.Entry?
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
@@ -297,7 +313,14 @@ final class CapturePipeline: @unchecked Sendable {
         if detector != nil, splitEnabled.load(ordering: .relaxed) {
             let analysis = detector!.process(level: level, duration: Double(layout.frames) / format.sampleRate)
             if analysis.didTriggerSplit { ring.pushMarker() }
-            if analysis.shouldDrop { return }
+            if analysis.shouldDrop {
+                if !sourceIsOutputting.load(ordering: .relaxed) {
+                    splitSilenceSourceStopped.store(true, ordering: .relaxed)
+                } else if peak == 0 {
+                    splitSilenceZeroFrames.add(layout.frames, ordering: .relaxed)
+                }
+                return
+            }
         }
         ring.commitStaged()
     }
@@ -363,15 +386,21 @@ final class CapturePipeline: @unchecked Sendable {
             scratch.frameLength = AVAudioFrameCount(count)
             takeOverflow += ring.overflowFrames.exchange(0, ordering: .relaxed)
 
+            if writer == nil {
+                framesWithoutTake += count
+                if !sourceIsOutputting.load(ordering: .relaxed) { (pendingSplit, lastTakeTrailingZeros) = (nil, 0) }
+            }
             if let machine {
                 var sink = Sink(pipeline: self)
                 machine.process(scratch, level: AudioLevel(measuring: scratch), sink: &sink)
+                if takeOpeningFrames == nil, let writer { takeOpeningFrames = Int(writer.framesWritten) }
                 publishPhase()
                 chargeTimeline()
                 continue
             }
             if writer == nil, !openTake() { continue }
             writeToTake(scratch)
+            if takeOpeningFrames == nil, let writer { takeOpeningFrames = Int(writer.framesWritten) }
             chargeTimeline()
         }
     }
@@ -404,7 +433,9 @@ final class CapturePipeline: @unchecked Sendable {
             vDSP_maxmgv(data[c], 1, &channelPeak, vDSP_Length(buffer.frameLength))
             takePeak = max(takePeak, channelPeak)
         }
-        takeZeros.add(data, channels: channelCount, frames: Int(buffer.frameLength), sourceIsPlaying: sourceIsOutputting.load(ordering: .relaxed))
+        let sourceIsPlaying = sourceIsOutputting.load(ordering: .relaxed)
+        takeZeros.add(data, channels: channelCount, frames: Int(buffer.frameLength), sourceIsPlaying: sourceIsPlaying)
+        takeEdges.add(data, channels: channelCount, frames: Int(buffer.frameLength), sourceIsPlaying: sourceIsPlaying)
         writer.write(buffer)
         currentTakeFrames.store(Int(writer.framesWritten), ordering: .relaxed)
     }
@@ -463,6 +494,14 @@ final class CapturePipeline: @unchecked Sendable {
         (takeJumps, takeSkippedFrames) = (0, 0)
         takeLateStartFrames = nil
         takeZeros = ZeroSpanMeter(maxHoleFrames: maxDropoutFrames)
+        var unwrittenZeros = splitSilenceZeroFrames.exchange(0, ordering: .relaxed)
+        if splitSilenceSourceStopped.exchange(false, ordering: .relaxed) {
+            (pendingSplit, lastTakeTrailingZeros, unwrittenZeros) = (nil, 0, 0)
+        }
+        takeEdges = PassageEdges(sampleRate: format.sampleRate, zerosBefore: unwrittenZeros + lastTakeTrailingZeros)
+        takeFramesBeforeOpen = framesWithoutTake + unwrittenZeros
+        framesWithoutTake = 0
+        takeOpeningFrames = nil
         if let pending = pendingLateStart, ring.consumedFrames - pending.position <= lateStartFrames + Int(scratch.frameCapacity) {
             takeLateStartFrames = pending.frames
         }
@@ -490,6 +529,7 @@ final class CapturePipeline: @unchecked Sendable {
             return
         }
         guard take.capturedFrames > 0 else {
+            pendingSplit = nil
             try? FileManager.default.removeItem(at: take.captureURL)
             handler(.discarded(take.id))
             return
@@ -511,9 +551,189 @@ final class CapturePipeline: @unchecked Sendable {
             warnings.append(.mostlyZero(zeroSeconds: Double(takeZeros.zeroFrames) / format.sampleRate,
                                         spanSeconds: Double(takeZeros.spanFrames) / format.sampleRate))
         }
+        warnings += edgeWarnings(take)
         take.warnings = warnings
         take.status = .exporting(progress: 0)
         handler(.closed(take))
+    }
+}
+
+/// Where a take's sound starts and stops, and whether it does so abruptly: from exact digital zero straight into a
+/// waveform, or from a waveform straight to exact zero, while the source reports running output. Real audio fades
+/// out or starts from near zero; a CoreAudio tap that goes to zeros cuts it mid-waveform (Hi-Res run: a continuous
+/// tone split into two takes around ~10 s of zeros). Only the take's first onset and last cut count; cuts inside
+/// a take are `ZeroSpanMeter` holes.
+struct PassageEdges {
+    /// −40 dBFS: the waveform next to the zeros must reach this within `windowSeconds`.
+    static let level: Float = 0.01
+    static let windowSeconds = 0.003
+    /// A sample next to exact zero that is at least this fraction of the nearby peak is mid-waveform.
+    static let midWaveform: Float = 0.25
+    static let minZeroFrames = ZeroSpanMeter.minHoleFrames
+
+    private(set) var frames = 0
+    /// Zero frames before the first non-zero frame.
+    private(set) var leadingZeros = 0
+    /// Zero frames after the last non-zero frame.
+    private(set) var trailingZeros = 0
+    /// Frame of the first sound, when it starts mid-waveform after zeros with the source playing.
+    private(set) var abruptOnsetFrame: Int?
+    /// Frame where the take's trailing zeros start, when the sound before them stopped mid-waveform and the source
+    /// kept playing through them.
+    var abruptEndFrame: Int? {
+        trailingZeros >= Self.minZeroFrames && cutIsAbrupt && !sourceStoppedSinceSound ? frames - trailingZeros : nil
+    }
+
+    /// The source reported running output since the take's last sound.
+    var sourceKeptPlaying: Bool { !sourceStoppedSinceSound }
+
+    private let windowFrames: Int
+    /// Exact-zero frames right before the take's first frame (split silence that was not written).
+    private let zerosBefore: Int
+    /// The last `windowFrames` magnitudes, then the current buffer's.
+    private var magnitudes: [Float]
+    private var channelMagnitudes: [Float] = []
+    private var signalSeen = false
+    private var sourceStoppedBeforeSound = false
+    private var sourceStoppedSinceSound = false
+    private var cutIsAbrupt = false
+    private var onsetFrame = 0
+    private var onsetFirst: Float = 0
+    private var onsetPeak: Float = 0
+    private var onsetRemaining = 0
+
+    init(sampleRate: Double, zerosBefore: Int = 0) {
+        windowFrames = max(1, Int(sampleRate * Self.windowSeconds))
+        self.zerosBefore = zerosBefore
+        magnitudes = Array(repeating: 0, count: windowFrames)
+    }
+
+    mutating func add(_ data: UnsafePointer<UnsafeMutablePointer<Float>>, channels: Int, frames count: Int, sourceIsPlaying: Bool) {
+        guard count > 0, channels > 0 else { return }
+        if !sourceIsPlaying {
+            if signalSeen { sourceStoppedSinceSound = true } else { sourceStoppedBeforeSound = true }
+        }
+        let w = windowFrames
+        var history: [Float] = []
+        var scratch: [Float] = []
+        swap(&history, &magnitudes)
+        swap(&scratch, &channelMagnitudes)
+        defer {
+            swap(&history, &magnitudes)
+            swap(&scratch, &channelMagnitudes)
+        }
+        if history.count < w + count { history += Array(repeating: 0, count: w + count - history.count) }
+        if channels > 1, scratch.count < count { scratch = Array(repeating: 0, count: count) }
+        history.withUnsafeMutableBufferPointer { buffer in
+            let all = buffer.baseAddress!
+            let current = all + w
+            let n = vDSP_Length(count)
+            vDSP_vabs(data[0], 1, current, 1, n)
+            scratch.withUnsafeMutableBufferPointer { channel in
+                for c in 1..<max(1, channels) {
+                    vDSP_vabs(data[c], 1, channel.baseAddress!, 1, n)
+                    vDSP_vmax(current, 1, channel.baseAddress!, 1, current, 1, n)
+                }
+            }
+            func peak(_ start: UnsafePointer<Float>, _ length: Int) -> Float {
+                var value: Float = 0
+                vDSP_maxv(start, 1, &value, vDSP_Length(length))
+                return value
+            }
+            if onsetRemaining > 0 {
+                let length = min(onsetRemaining, count)
+                onsetPeak = max(onsetPeak, peak(current, length))
+                onsetRemaining -= length
+                if onsetRemaining == 0 { decideOnset(sourceIsPlaying: sourceIsPlaying) }
+            }
+            var lowest: Float = 0
+            vDSP_minv(current, 1, &lowest, n)
+            let highest = peak(current, count)
+            if signalSeen, lowest > 0 {
+                trailingZeros = 0
+                sourceStoppedSinceSound = false
+            } else if highest == 0 {
+                if signalSeen {
+                    if trailingZeros == 0 { noteCut(at: current, peak: peak(current - w, w), sourceIsPlaying: sourceIsPlaying) }
+                    trailingZeros += count
+                } else {
+                    leadingZeros += count
+                }
+            } else {
+                for f in 0..<count {
+                    let magnitude = current[f]
+                    if magnitude == 0 {
+                        if signalSeen {
+                            if trailingZeros == 0 { noteCut(at: current + f, peak: peak(current + f - w, w), sourceIsPlaying: sourceIsPlaying) }
+                            trailingZeros += 1
+                        } else {
+                            leadingZeros += 1
+                        }
+                        continue
+                    }
+                    if !signalSeen {
+                        signalSeen = true
+                        onsetFrame = frames + f
+                        onsetFirst = magnitude
+                        let length = min(w, count - f)
+                        onsetPeak = peak(current + f, length)
+                        onsetRemaining = w - length
+                        if onsetRemaining == 0 { decideOnset(sourceIsPlaying: sourceIsPlaying) }
+                    }
+                    trailingZeros = 0
+                    sourceStoppedSinceSound = false
+                }
+            }
+            memmove(all, all + count, w * MemoryLayout<Float>.stride)
+        }
+        frames += count
+    }
+
+    /// `zero` points at the first zero after sound; `peak` is the loudest magnitude in the window before it.
+    private mutating func noteCut(at zero: UnsafePointer<Float>, peak: Float, sourceIsPlaying: Bool) {
+        cutIsAbrupt = sourceIsPlaying && peak >= Self.level && zero[-1] >= Self.midWaveform * peak
+    }
+
+    private mutating func decideOnset(sourceIsPlaying: Bool) {
+        if sourceIsPlaying, !sourceStoppedBeforeSound, leadingZeros + zerosBefore >= Self.minZeroFrames,
+           onsetPeak >= Self.level, onsetFirst >= Self.midWaveform * onsetPeak {
+            abruptOnsetFrame = onsetFrame
+        }
+    }
+
+    /// Zero frames between an abrupt end and the next take's abrupt onset: the earlier take's trailing zeros, the
+    /// frames read while no take was open (less those the next take received when it opened, its pre-roll), and the
+    /// next take's leading zeros.
+    static func splitGapFrames(previousTrailingZeros: Int, framesWithoutTake: Int, openingFrames: Int, leadingZeros: Int) -> Int {
+        previousTrailingZeros + max(0, framesWithoutTake - openingFrames) + leadingZeros
+    }
+}
+
+extension CapturePipeline {
+    /// Abrupt start and end of the take's sound, and the link to the previous take when one passage looks split
+    /// between them. Updates `pendingSplit` for the next take.
+    fileprivate func edgeWarnings(_ take: RecordingTake) -> [TakeWarning] {
+        let rate = format.sampleRate
+        let seconds = { (frames: Int) in Double(frames) / rate }
+        var warnings: [TakeWarning] = []
+        if let onset = takeEdges.abruptOnsetFrame {
+            warnings.append(.abruptStart(atSeconds: seconds(onset)))
+        }
+        if let pending = pendingSplit, takeEdges.abruptOnsetFrame != nil {
+            let gap = PassageEdges.splitGapFrames(previousTrailingZeros: pending.trailingZeros,
+                                                  framesWithoutTake: takeFramesBeforeOpen,
+                                                  openingFrames: takeOpeningFrames ?? 0,
+                                                  leadingZeros: takeEdges.leadingZeros)
+            warnings.append(.splitFromPrevious(gapSeconds: seconds(gap)))
+            handler(.amended(pending.id, warning: .splitIntoNext(gapSeconds: seconds(gap))))
+        }
+        pendingSplit = nil
+        lastTakeTrailingZeros = takeEdges.sourceKeptPlaying ? takeEdges.trailingZeros : 0
+        if let end = takeEdges.abruptEndFrame {
+            warnings.append(.abruptEnd(atSeconds: seconds(end)))
+            pendingSplit = (take.id, takeEdges.trailingZeros)
+        }
+        return warnings
     }
 }
 

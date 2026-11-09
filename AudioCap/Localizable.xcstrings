@@ -400,6 +400,26 @@
         }
       }
     },
+    "Audio started abruptly mid-waveform at %@ s while %@ was playing; the start may be missing." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El audio empezó de golpe, a mitad de onda, a los %1$@ s mientras %2$@ sonaba; puede faltar el principio."
+          }
+        }
+      }
+    },
+    "Audio stopped abruptly at %@ s while %@ was playing; the rest may be missing." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El audio se cortó de golpe a los %1$@ s mientras %2$@ sonaba; puede faltar el resto."
+          }
+        }
+      }
+    },
     "AudioCap Hi-Res disappeared. The output is back on %@; recording continues at that device's rate." : {
       "localizations" : {
         "es" : {
@@ -2253,6 +2273,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Puede que la toma empiece hasta %@ s tarde: su primer sonido llegó durante una renovación de la captura en reposo o justo después, y el audio reproducido durante la renovación no está en la toma."
+          }
+        }
+      }
+    },
+    "This take and the next one may be one passage split by a CoreAudio dropout; %@ s between them (digital zeros while %@ was playing) are not in either take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta toma y la siguiente pueden ser un mismo pasaje partido por un corte de CoreAudio; los %1$@ s entre ambas (ceros digitales mientras %2$@ sonaba) no están en ninguna de las dos."
+          }
+        }
+      }
+    },
+    "This take and the previous one may be one passage split by a CoreAudio dropout; %@ s between them (digital zeros while %@ was playing) are not in either take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta toma y la anterior pueden ser un mismo pasaje partido por un corte de CoreAudio; los %1$@ s entre ambas (ceros digitales mientras %2$@ sonaba) no están en ninguna de las dos."
           }
         }
       }

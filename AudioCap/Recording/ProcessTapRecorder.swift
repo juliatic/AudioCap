@@ -280,6 +280,10 @@ final class ProcessTapRecorder {
             if case .exporting = take.status { export(take) }
         case .discarded(let id):
             remove(id)
+        case .amended(let id, let warning):
+            guard let index = takes.firstIndex(where: { $0.id == id }) else { return }
+            takes[index].warnings.append(warning)
+            eventContinuations.values.forEach { $0.yield(.updated(takes[index])) }
         case .failed(let message):
             lastError = message
             logger.error("\(message, privacy: .public)")
