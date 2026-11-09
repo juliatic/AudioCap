@@ -2432,10 +2432,11 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			break;
 
 		case kAudioDevicePropertySafetyOffset:
-			//	This property returns the how close to now the HAL can read and write. For
-			//	this, device, the value is 0 due to the fact that it always vends silence.
+			//	This property returns the how close to now the HAL can read and write. AudioCap: about
+			//	2.7 ms at any rate (512 frames at 192 kHz) instead of the sample's 0, which left clients
+			//	no margin and made the HAL report overloads (dropped source audio) at 192 kHz.
 			FailWithAction(inDataSize < sizeof(UInt32), theAnswer = kAudioHardwareBadPropertySizeError, Done, "NullAudio_GetDevicePropertyData: not enough space for the return value of kAudioDevicePropertySafetyOffset for the device");
-			*((UInt32*)outData) = 0;
+			*((UInt32*)outData) = (UInt32)(gDevice_SampleRate / 375.0);
 			*outDataSize = sizeof(UInt32);
 			break;
 
