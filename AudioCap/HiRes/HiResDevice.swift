@@ -69,21 +69,27 @@ final class CoreAudioOutputSystem: AudioOutputSystem {
 
     /// Sets the nominal rate and waits (bounded, 2 s) until the device reports it: the driver applies it asynchronously.
     func setNominalSampleRate(_ rate: Double, uid: String) throws {
-        let id = try deviceID(uid: uid)
-        if (try? id.readNominalSampleRate()) == rate { return }
-        var value = Float64(rate)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-        try checkStatus(AudioObjectSetPropertyData(id, &address, 0, nil, UInt32(MemoryLayout<Float64>.size), &value), "Setting \(uid) to \(rate) Hz")
-        for _ in 0..<40 {
-            if (try? id.readNominalSampleRate()) == rate { return }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        throw "\(HiResDevice.name) did not switch to \(HiResDevice.rateString(rate))."
+        try deviceID(uid: uid).setNominalSampleRate(rate, name: uid)
     }
 
     func deviceID(uid: String) throws -> AudioDeviceID {
         let id = try AudioObjectID.system.read(kAudioHardwarePropertyTranslateUIDToDevice, defaultValue: AudioDeviceID.unknown, qualifier: uid as CFString)
         guard id.isValid else { throw "Audio device \(uid) is not available." }
         return id
+    }
+}
+
+extension AudioDeviceID {
+    /// Sets the nominal rate and waits (bounded, 2 s) until the device reports it: devices apply it asynchronously.
+    func setNominalSampleRate(_ rate: Double, name: String) throws {
+        if (try? readNominalSampleRate()) == rate { return }
+        var value = Float64(rate)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        try checkStatus(AudioObjectSetPropertyData(self, &address, 0, nil, UInt32(MemoryLayout<Float64>.size), &value), "Setting \(name) to \(rate) Hz")
+        for _ in 0..<40 {
+            if (try? readNominalSampleRate()) == rate { return }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        throw "\(name) did not switch to \(HiResDevice.rateString(rate))."
     }
 }

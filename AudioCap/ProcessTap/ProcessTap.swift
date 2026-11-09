@@ -308,6 +308,15 @@ final class ProcessTap {
         try checkStatus(AudioHardwareCreateAggregateDevice(description as CFDictionary, &deviceID), "Creating the aggregate device")
         aggregateDeviceID = deviceID
         aggregateSampleRate = try? deviceID.readNominalSampleRate()
+        // Without sub-devices the aggregate runs at the tap's rate. In Hi-Res mode it must run at the Hi-Res rate.
+        if output.uid == HiResDevice.uid, let rate = output.nominalSampleRate, aggregateSampleRate != rate {
+            do {
+                try deviceID.setNominalSampleRate(rate, name: "The tap aggregate")
+                aggregateSampleRate = rate
+            } catch {
+                logger.warning("Could not run the aggregate at the Hi-Res rate: \(error.audioCapDescription, privacy: .public)")
+            }
+        }
 
         logger.debug("Created aggregate device #\(deviceID, privacy: .public) on \(output.description, privacy: .public)")
     }
