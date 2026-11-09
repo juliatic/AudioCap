@@ -32,6 +32,7 @@ struct QualityPath: Equatable, Sendable {
     }
 
     var sourceName: String
+    var sourceBundleID: String?
     /// The rate the source material has, when the source reports it (most apps don't).
     var sourceSampleRate: Double?
     var sourceChannelCount: Int?

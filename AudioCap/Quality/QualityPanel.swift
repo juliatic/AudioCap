@@ -6,6 +6,7 @@ enum QualityPathBuilder {
     @MainActor
     static func build(tap: ProcessTap, recorder: ProcessTapRecorder, format: RecordingSettings.OutputFormat) -> QualityPath {
         var path = QualityPath(sourceName: tap.process.name)
+        path.sourceBundleID = tap.process.bundleID
         if let asbd = tap.tapStreamDescription, asbd.mSampleRate > 0 {
             path.tap = .init(sampleRate: asbd.mSampleRate, channelCount: Int(asbd.mChannelsPerFrame))
         }

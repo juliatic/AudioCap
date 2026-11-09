@@ -85,6 +85,27 @@ final class QualityAssessmentTests: XCTestCase {
         XCTAssertTrue(result.notes.contains(.monitor(deviceName: "Speakers", sampleRate: 48_000)))
     }
 
+    func testAfterHiResStopTheIdlePanelDoesNotClaimResampling() {
+        // After Stop: the tap still reports the take's 96 kHz mix, the restored BlackHole runs at 48 kHz, no capture.
+        var idle = path(tapRate: 96_000, deviceRate: 48_000, captureRate: nil)
+        idle.clock?.name = "BlackHole 2ch"
+        XCTAssertEqual(QualityAssessment.assess(idle).issues, [.resampled(from: 96_000, to: 48_000)], "the reported bug")
+
+        let next = HiResController.predictedHiResPath(from: idle, rate: 96_000, monitorName: "BlackHole 2ch")
+        let result = QualityAssessment.assess(next)
+        XCTAssertTrue(result.isBitPerfect)
+        XCTAssertEqual(next.captureRate, 96_000)
+        XCTAssertEqual(next.file?.sampleRate, 96_000)
+        XCTAssertTrue(result.notes.contains(.predicted))
+        XCTAssertTrue(result.notes.contains(.hiResDevice))
+        XCTAssertTrue(result.notes.contains(.monitor(deviceName: "BlackHole 2ch", sampleRate: nil)))
+    }
+
+    func testHiResPredictionKeepsAACAtItsMaximumRate() {
+        let next = HiResController.predictedHiResPath(from: path(captureRate: nil, format: .aac), rate: 192_000, monitorName: "Speakers")
+        XCTAssertEqual(next.file?.sampleRate, AudioExporter.maxAACSampleRate)
+    }
+
     func testEveryIssueAndNoteHasText() {
         let issues: [QualityIssue] = [.resampled(from: 44_100, to: 48_000), .resampled(from: nil, to: 48_000), .downmixed(from: 6, to: 2),
                                       .downmixed(from: 6, to: 4), .possibleDownmix(deviceChannels: 8, to: 2), .exportResampled(to: 48_000), .lossyFile]
