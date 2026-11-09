@@ -62,6 +62,14 @@ final class TakeWarningTests: XCTestCase {
                        "Cortes en el audio de afplay: 2 (CoreAudio entregó ceros digitales mientras sonaba; 480 tramas, \(0.01.formatted(.number.precision(.fractionLength(3)))) s). Ese audio falta en la toma.")
     }
 
+    func testStartMayBeLateRendering() throws {
+        let shown = 0.022.formatted(.number.precision(.fractionLength(3)))
+        XCTAssertEqual(TakeWarning.startMayBeLate(seconds: 0.022).text(source: .app(name: "afplay")),
+                       "The take may start up to \(shown) s late: its first sound arrived during or right after an idle tap refresh, and audio played during the refresh is not in the take.")
+        XCTAssertTrue(TakeWarning.startMayBeLate(seconds: 0.022).text(source: .app(name: "afplay"), bundle: try spanish)
+            .hasPrefix("Puede que la toma empiece hasta \(shown) s tarde"))
+    }
+
     func testLegacyLibraryEntryMigratesAndIsRewrittenAsCodes() throws {
         let asbd = AudioStreamBasicDescription(mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
                                                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,

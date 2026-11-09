@@ -455,7 +455,8 @@ final class ProcessTapRecorder {
         lines.append("I/O cycles with no pipeline attached: \(unattachedCycles.value.load(ordering: .relaxed))")
         if let pipeline {
             lines.append("Device timeline: \(pipeline.discontinuities.load(ordering: .relaxed)) jumps, \(pipeline.skippedFrames.load(ordering: .relaxed)) frames skipped")
-            lines.append("Idle tap refreshes: \(idleTapRefreshes)")
+            let refreshGap = Double(pipeline.idleRefreshGapFrames.load(ordering: .relaxed)) / pipeline.format.sampleRate
+            lines.append("Idle tap refreshes: \(idleTapRefreshes), uncaptured \(refreshGap.formatted(.number.precision(.fractionLength(3)))) s in total")
             lines.append("Dropouts (zeros mid-signal while the source plays): \(pipeline.dropouts.load(ordering: .relaxed)), \(pipeline.dropoutFrames.load(ordering: .relaxed)) frames")
             lines.append("Capture pipeline: \(pipeline.ioCycles.load(ordering: .relaxed)) I/O cycles, \(pipeline.layoutMismatches.load(ordering: .relaxed)) layout mismatches, \(pipeline.ring.overflowFrames.load(ordering: .relaxed)) overflow frames, ring \(pipeline.ring.capacity) frames, digital silence run \(pipeline.digitalSilenceRun.load(ordering: .relaxed)) frames")
         }

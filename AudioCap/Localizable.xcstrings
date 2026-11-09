@@ -2237,6 +2237,16 @@
         }
       }
     },
+    "The take may start up to %@ s late: its first sound arrived during or right after an idle tap refresh, and audio played during the refresh is not in the take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puede que la toma empiece hasta %@ s tarde: su primer sonido llegó durante una renovación del tap en reposo o justo después, y el audio reproducido durante la renovación no está en la toma."
+          }
+        }
+      }
+    },
     "Threshold (dB)" : {
       "localizations" : {
         "es" : {

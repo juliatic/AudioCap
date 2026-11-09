@@ -29,6 +29,8 @@ enum TakeWarning: Codable, Hashable, Sendable {
     case timelineJumps(count: Int, skippedFrames: Int)
     /// CoreAudio delivered digital zeros mid-signal while the source was playing.
     case dropouts(count: Int, frames: Int, seconds: Double)
+    /// The first sound arrived during or right after an idle tap refresh; `seconds` bounds how late the take starts.
+    case startMayBeLate(seconds: Double)
     /// Free text from an index written before warnings were codes, when it matches no known warning.
     case legacyText(text: String)
 
@@ -47,6 +49,9 @@ enum TakeWarning: Codable, Hashable, Sendable {
             let sourceName = source.displayName(bundle: bundle)
             let secondsText = seconds.formatted(.number.precision(.fractionLength(3)))
             return String(localized: "CoreAudio delivered digital zeros instead of \(sourceName)'s audio \(count) time(s) while it was playing (\(frames) frames, \(secondsText) s); that audio is missing from the take.", bundle: bundle)
+        case .startMayBeLate(let seconds):
+            let secondsText = seconds.formatted(.number.precision(.fractionLength(3)))
+            return String(localized: "The take may start up to \(secondsText) s late: its first sound arrived during or right after an idle tap refresh, and audio played during the refresh is not in the take.", bundle: bundle)
         case .legacyText(let text):
             return text
         }

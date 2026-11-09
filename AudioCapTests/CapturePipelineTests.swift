@@ -36,7 +36,7 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let maxFrames = sizes.max()!
         var interleaved = [Float](repeating: 0, count: maxFrames * 2)
         var time = AudioTimeStamp()
-        time.mFlags = .sampleTimeValid
+        time.mFlags = [.sampleTimeValid, .hostTimeValid]
         for cycle in 0..<cycles {
             let frames = sizes[cycle % sizes.count]
             for i in 0..<frames {
@@ -46,6 +46,7 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
             interleaved.withUnsafeMutableBytes { raw in
                 var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(frames * 8), mData: raw.baseAddress))
                 time.mSampleTime = sampleTime
+                time.mHostTime = UInt64(sampleTime / format.sampleRate * CapturePipeline.hostTicksPerSecond)
                 pipeline.process(&list, time: &time)
             }
             start += frames
@@ -129,6 +130,47 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let warning = try XCTUnwrap(collector.closed.first?.warning)
         XCTAssertTrue(warning.contains("0.400 s"), warning)
         XCTAssertFalse(warning.contains("timeline jumped"))
+    }
+
+    /// One take of sound, a split, then an idle refresh that leaves `gapFrames` uncaptured, `silentCycles` of zeros
+    /// and a second take of sound.
+    private func feedRefresh(_ pipeline: CapturePipeline, gapFrames: Int, silentCycles: Int) {
+        var next = 0
+        var sampleTime = 0.0
+        let tone: (Int, Int) -> Float = { _, _ in 0.5 }
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        feed(pipeline, cycles: 200, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        pipeline.noteReconnect(chargesTake: false)
+        sampleTime += Double(gapFrames)
+        feed(pipeline, cycles: silentCycles, sizes: [480], start: &next, sampleTime: &sampleTime) { _, _ in 0 }
+        feed(pipeline, cycles: 100, sizes: [480], start: &next, sampleTime: &sampleTime, value: tone)
+        pipeline.finish()
+    }
+
+    func testSoundRightAfterAnIdleRefreshIsFlaggedAsAPossiblyLateStart() throws {
+        for silentCycles in [0, 40] { // first sound at once, or 0.4 s after the refresh
+            let collector = Collector()
+            let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+            feedRefresh(pipeline, gapFrames: 19_200, silentCycles: silentCycles)
+            let takes = collector.closed
+            XCTAssertEqual(takes.count, 2)
+            XCTAssertNil(takes.first?.warning)
+            let warning = try XCTUnwrap(takes.last?.warning)
+            let shown = silentCycles == 0 ? "0.400" : "0.800" // the uncaptured gap plus the zeros after it
+            XCTAssertTrue(warning.contains("may start up to \(shown) s late"), warning)
+            XCTAssertFalse(warning.contains("reconnected"), warning)
+            XCTAssertEqual(pipeline.idleRefreshes.load(ordering: .relaxed), 1)
+            XCTAssertEqual(pipeline.idleRefreshGapFrames.load(ordering: .relaxed), 19_200)
+        }
+    }
+
+    func testSoundLaterThanHalfASecondAfterAnIdleRefreshIsNotFlagged() {
+        let collector = Collector()
+        let pipeline = makePipeline(collector, detector: SilenceDetector(thresholdDb: -60, minSilenceDuration: 0.5))
+        feedRefresh(pipeline, gapFrames: 19_200, silentCycles: 60) // 0.6 s
+        let takes = collector.closed
+        XCTAssertEqual(takes.count, 2)
+        XCTAssertNil(takes.last?.warning)
     }
 
     func testLongSilenceOrSilentSourceIsNotADropout() throws {

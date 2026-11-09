@@ -83,6 +83,16 @@ final class CapturePipeline: @unchecked Sendable {
     /// A cycle edge at or above this magnitude (-40 dBFS) counts as an abrupt cut or return.
     static let dropoutEdge: Float = 0.01
     static let maxDropoutSeconds = 1.0
+    /// A take whose first signal arrives this soon after an idle tap refresh may have lost its onset to the refresh.
+    static let lateStartSeconds = 0.5
+    static let hostTicksPerSecond: Double = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return 1e9 * Double(info.denom) / Double(info.numer)
+    }()
+    /// Idle tap refreshes and the audio time between the last cycle before and the first cycle after each (diagnostics).
+    let idleRefreshes = Atomic<Int>(0)
+    let idleRefreshGapFrames = Atomic<Int>(0)
     private let signalSeen = Atomic<Bool>(false)
     /// `true` once any non-zero sample has arrived in this pipeline.
     var hasSeenSignal: Bool { signalSeen.load(ordering: .relaxed) }
@@ -100,6 +110,14 @@ final class CapturePipeline: @unchecked Sendable {
     private var pendingDropoutFrames = 0
     private var pendingDropoutPosition = 0
     private let maxDropoutFrames: Int
+    private let lateStartFrames: Int
+    /// Host time at the end of the previous cycle; 0 when unknown.
+    private var lastCycleEndHost: UInt64 = 0
+    private var awaitingRefreshEnd = false
+    /// Uncaptured frames of the last idle refresh, and frames since it ended (`Int.max` once past `lateStartFrames`).
+    /// A fresh tap can deliver zeros for its first cycles, so a late start counts both.
+    private var refreshGap = 0
+    private var framesSinceRefresh = Int.max
 
     // Writer queue only.
     private var timer: DispatchSourceTimer?
@@ -111,6 +129,9 @@ final class CapturePipeline: @unchecked Sendable {
     private var takeSkippedFrames = 0
     private var takeDropouts = 0
     private var takeDropoutFrames = 0
+    /// Uncaptured frames of the refresh the take's onset followed, if any.
+    private var takeLateStartFrames: Int?
+    private var pendingLateStart: CaptureTimelineLog.Entry?
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
     private var openFailed = false
@@ -147,6 +168,7 @@ final class CapturePipeline: @unchecked Sendable {
         self.handler = handler
         self.channelCount = Int(writerFormat.channelCount)
         self.maxDropoutFrames = Int(format.sampleRate * Self.maxDropoutSeconds)
+        self.lateStartFrames = Int(format.sampleRate * Self.lateStartSeconds)
         self.detector = options.silenceDetector
         self.ring = CaptureRingBuffer(channelCount: channelCount, minimumCapacity: Int(format.sampleRate * options.bufferedSeconds))
         self.scratch = AVAudioPCMBuffer(pcmFormat: writerFormat, frameCapacity: 16_384)!
@@ -187,6 +209,21 @@ final class CapturePipeline: @unchecked Sendable {
                 timeline.push(.init(kind: .jump, position: ring.producedFrames, frames: skipped))
             }
             nextSampleTime = sampleTime + Float64(layout.frames)
+        }
+        if awaitingRefreshEnd {
+            awaitingRefreshEnd = false
+            var gapSeconds = 0.0
+            if let time, time.pointee.mFlags.contains(.hostTimeValid), lastCycleEndHost > 0, time.pointee.mHostTime > lastCycleEndHost {
+                gapSeconds = Double(time.pointee.mHostTime - lastCycleEndHost) / Self.hostTicksPerSecond
+            }
+            refreshGap = Int((gapSeconds * format.sampleRate).rounded())
+            idleRefreshGapFrames.add(refreshGap, ordering: .relaxed)
+            framesSinceRefresh = 0
+        }
+        if let time, time.pointee.mFlags.contains(.hostTimeValid) {
+            lastCycleEndHost = time.pointee.mHostTime + UInt64(Double(layout.frames) / format.sampleRate * Self.hostTicksPerSecond)
+        } else {
+            lastCycleEndHost = 0
         }
         if layout.sourceChannels != channelCount { layoutMismatches.add(1, ordering: .relaxed) }
 
@@ -236,6 +273,13 @@ final class CapturePipeline: @unchecked Sendable {
             }
             pendingDropoutFrames = 0
             lastEdge = endEdge
+            if framesSinceRefresh <= lateStartFrames {
+                timeline.push(.init(kind: .lateStart, position: ring.producedFrames, frames: refreshGap + framesSinceRefresh))
+                framesSinceRefresh = .max
+            }
+        }
+        if framesSinceRefresh != .max {
+            framesSinceRefresh = framesSinceRefresh + layout.frames > lateStartFrames ? .max : framesSinceRefresh + layout.frames
         }
 
         if detector != nil, splitEnabled.load(ordering: .relaxed) {
@@ -248,12 +292,19 @@ final class CapturePipeline: @unchecked Sendable {
 
     /// Marks a deliberate restart of the device: the next cycle's sample time starts a new timeline and is not
     /// counted as a discontinuity. Call on the I/O queue while the producer is gated.
-    /// `chargesTake: false` for a refresh done while no take is open: the next take did not lose audio to it.
+    /// `chargesTake: false` for an idle refresh done while no take is open: it is not a reconnect of a take, but a
+    /// take whose first signal arrives within `lateStartSeconds` of it is flagged as possibly starting late.
     func noteReconnect(chargesTake: Bool = true) {
         nextSampleTime = -1
         lastEdge = 0
         pendingDropoutFrames = 0
-        if chargesTake { reconnects.add(1, ordering: .relaxed) }
+        framesSinceRefresh = .max
+        if chargesTake {
+            reconnects.add(1, ordering: .relaxed)
+        } else {
+            idleRefreshes.add(1, ordering: .relaxed)
+            awaitingRefreshEnd = true
+        }
     }
 
     // MARK: - Writer queue
@@ -311,10 +362,14 @@ final class CapturePipeline: @unchecked Sendable {
     }
 
     /// Charges the timeline entries of the frames read so far to the open take, or drops them while none is open.
+    /// A late start seen while no take is open is kept for a take that opens shortly after.
     private func chargeTimeline() {
         let isTakeOpen = writer != nil
         timeline.consume(before: ring.consumedFrames) { entry in
-            guard isTakeOpen else { return }
+            guard isTakeOpen else {
+                if entry.kind == .lateStart { pendingLateStart = entry }
+                return
+            }
             switch entry.kind {
             case .jump:
                 takeJumps += 1
@@ -322,6 +377,8 @@ final class CapturePipeline: @unchecked Sendable {
             case .dropout:
                 takeDropouts += 1
                 takeDropoutFrames += entry.frames
+            case .lateStart:
+                takeLateStartFrames = max(takeLateStartFrames ?? 0, entry.frames)
             }
         }
     }
@@ -389,6 +446,11 @@ final class CapturePipeline: @unchecked Sendable {
         takePeak = 0
         isTakeOpen.store(true, ordering: .relaxed)
         (takeJumps, takeSkippedFrames, takeDropouts, takeDropoutFrames) = (0, 0, 0, 0)
+        takeLateStartFrames = nil
+        if let pending = pendingLateStart, ring.consumedFrames - pending.position <= lateStartFrames + Int(scratch.frameCapacity) {
+            takeLateStartFrames = pending.frames
+        }
+        pendingLateStart = nil
         handler(.opened(take))
         return true
     }
@@ -426,6 +488,9 @@ final class CapturePipeline: @unchecked Sendable {
             warnings.append(.dropouts(count: takeDropouts, frames: takeDropoutFrames,
                                       seconds: Double(takeDropoutFrames) / format.sampleRate))
         }
+        if let lateFrames = takeLateStartFrames {
+            warnings.append(.startMayBeLate(seconds: Double(lateFrames) / format.sampleRate))
+        }
         take.warnings = warnings
         take.status = .exporting(progress: 0)
         handler(.closed(take))
@@ -436,7 +501,7 @@ final class CapturePipeline: @unchecked Sendable {
 /// writer queue charges each one to the take that contains that position (or to none, while no take is open).
 /// Single producer (I/O thread), single consumer (writer queue); no allocation or locks after init.
 final class CaptureTimelineLog: @unchecked Sendable {
-    enum Kind: UInt8 { case jump, dropout }
+    enum Kind: UInt8 { case jump, dropout, lateStart }
     struct Entry { var kind: Kind; var position: Int; var frames: Int }
 
     static let capacity = 256
