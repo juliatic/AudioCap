@@ -344,14 +344,37 @@ run_as_admin() {
     fi
 }
 
+# Restarting coreaudiod lets macOS pick new default devices; keep the user's input, output and alert devices.
+DEFAULTS_HELPER="$BUILD_DIR/audio-defaults"
+DEFAULTS_FILE="$BUILD_DIR/.audio-defaults-before-driver-change"
+
+save_audio_defaults() {
+    local source="$ROOT_DIR/scripts/audio-defaults.c"
+    if [ ! -x "$DEFAULTS_HELPER" ] || [ "$source" -nt "$DEFAULTS_HELPER" ]; then
+        mkdir -p "$BUILD_DIR"
+        with_timeout 120 xcrun clang -O2 -framework CoreAudio -framework CoreFoundation -o "$DEFAULTS_HELPER" "$source" ||
+            { warn "Could not build the audio-defaults helper; default devices may change."; return 0; }
+    fi
+    with_timeout 20 "$DEFAULTS_HELPER" save > "$DEFAULTS_FILE" || rm -f "$DEFAULTS_FILE"
+}
+
+restore_audio_defaults() {
+    [ -x "$DEFAULTS_HELPER" ] && [ -s "$DEFAULTS_FILE" ] || return 0
+    with_timeout 30 "$DEFAULTS_HELPER" restore "$DEFAULTS_FILE" ||
+        warn "Check the input, output and alert devices in System Settings > Sound."
+    rm -f "$DEFAULTS_FILE"
+}
+
 restart_coreaudio_cmd='launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null || killall coreaudiod 2>/dev/null || true'
 
 copy_driver() {
     [ -d "$BUILT_DRIVER" ] || die "The build has no $DRIVER_NAME (expected $BUILT_DRIVER)."
     say "Installing the AudioCap Hi-Res device into $HAL_DIR and restarting Core Audio (audio stops for a moment)..."
     local staging="$HAL_DIR/.$DRIVER_NAME.installing"
+    save_audio_defaults
     run_as_admin "mkdir -p '$HAL_DIR' && rm -rf '$staging' && ditto '$BUILT_DRIVER' '$staging' && rm -rf '$INSTALLED_DRIVER' && mv '$staging' '$INSTALLED_DRIVER' && chown -R root:wheel '$INSTALLED_DRIVER' && { $restart_coreaudio_cmd; }" ||
         die "Installing $DRIVER_NAME failed; nothing else was changed."
+    restore_audio_defaults
     rm -f "$DRIVER_DECLINED_MARK"
     say "Installed $INSTALLED_DRIVER. AudioCap uses it while recording (Settings > Hi-Res mode)."
 }
@@ -370,8 +393,10 @@ uninstall_driver() {
         return 0
     fi
     say "Removing $INSTALLED_DRIVER and restarting Core Audio..."
+    save_audio_defaults
     run_as_admin "rm -rf '$INSTALLED_DRIVER' && { $restart_coreaudio_cmd; }" ||
         die "Removing $DRIVER_NAME failed."
+    restore_audio_defaults
     touch "$DRIVER_DECLINED_MARK" 2>/dev/null || true
     say "Removed. Run ./start.sh --install-driver to install it again."
 }

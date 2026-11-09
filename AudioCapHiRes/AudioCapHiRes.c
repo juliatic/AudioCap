@@ -1973,11 +1973,12 @@ static OSStatus	NullAudio_GetDevicePropertyDataSize(AudioServerPlugInDriverRef i
 			switch(inAddress->mScope)
 			{
 				case kAudioObjectPropertyScopeGlobal:
-					*outDataSize = 8 * sizeof(AudioObjectID);
+					//	AudioCap: output side only (stream and its 4 controls); no input stream.
+					*outDataSize = 5 * sizeof(AudioObjectID);
 					break;
 					
 				case kAudioObjectPropertyScopeInput:
-					*outDataSize = 4 * sizeof(AudioObjectID);
+					*outDataSize = 0;
 					break;
 					
 				case kAudioObjectPropertyScopeOutput:
@@ -2030,11 +2031,11 @@ static OSStatus	NullAudio_GetDevicePropertyDataSize(AudioServerPlugInDriverRef i
 			switch(inAddress->mScope)
 			{
 				case kAudioObjectPropertyScopeGlobal:
-					*outDataSize = 2 * sizeof(AudioObjectID);
+					*outDataSize = 1 * sizeof(AudioObjectID);
 					break;
 					
 				case kAudioObjectPropertyScopeInput:
-					*outDataSize = 1 * sizeof(AudioObjectID);
+					*outDataSize = 0;
 					break;
 					
 				case kAudioObjectPropertyScopeOutput:
@@ -2044,7 +2045,7 @@ static OSStatus	NullAudio_GetDevicePropertyDataSize(AudioServerPlugInDriverRef i
 			break;
 
 		case kAudioObjectPropertyControlList:
-			*outDataSize = 7 * sizeof(AudioObjectID);
+			*outDataSize = 4 * sizeof(AudioObjectID);
 			break;
 
 		case kAudioDevicePropertySafetyOffset:
@@ -2182,31 +2183,22 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			switch(inAddress->mScope)
 			{
 				case kAudioObjectPropertyScopeGlobal:
-					//	global scope means return all objects
-					if(theNumberItemsToFetch > 9)
+					//	global scope means return all objects. AudioCap: the device has no input side,
+					//	so it can't become the default input; the tap only uses it as a clock.
+					if(theNumberItemsToFetch > 5)
 					{
-						theNumberItemsToFetch = 9;
+						theNumberItemsToFetch = 5;
 					}
 					
 					//	fill out the list with as many objects as requested, which is everything
 					for(theItemIndex = 0; theItemIndex < theNumberItemsToFetch; ++theItemIndex)
 					{
-						((AudioObjectID*)outData)[theItemIndex] = kObjectID_Stream_Input + theItemIndex;
+						((AudioObjectID*)outData)[theItemIndex] = kObjectID_Stream_Output + theItemIndex;
 					}
 					break;
 					
 				case kAudioObjectPropertyScopeInput:
-					//	input scope means just the objects on the input side
-					if(theNumberItemsToFetch > 4)
-					{
-						theNumberItemsToFetch = 4;
-					}
-					
-					//	fill out the list with the right objects
-					for(theItemIndex = 0; theItemIndex < theNumberItemsToFetch; ++theItemIndex)
-					{
-						((AudioObjectID*)outData)[theItemIndex] = kObjectID_Stream_Input + theItemIndex;
-					}
+					theNumberItemsToFetch = 0;
 					break;
 					
 				case kAudioObjectPropertyScopeOutput:
@@ -2321,8 +2313,9 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			//	default device for content. This is the device that iTunes and QuickTime
 			//	will use to play their content on and FaceTime will use as it's microhphone.
 			//	Nearly all devices should allow for this.
+			//	AudioCap: only as an output, which AudioCap selects itself while recording.
 			FailWithAction(inDataSize < sizeof(UInt32), theAnswer = kAudioHardwareBadPropertySizeError, Done, "NullAudio_GetDevicePropertyData: not enough space for the return value of kAudioDevicePropertyDeviceCanBeDefaultDevice for the device");
-			*((UInt32*)outData) = 1;
+			*((UInt32*)outData) = (inAddress->mScope == kAudioObjectPropertyScopeInput) ? 0 : 1;
 			*outDataSize = sizeof(UInt32);
 			break;
 
@@ -2331,8 +2324,9 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			//	default device. This is the device that is used to play interface sounds and
 			//	other incidental or UI-related sounds on. Most devices should allow this
 			//	although devices with lots of latency may not want to.
+			//	AudioCap: never the alert/system sound device; it makes no sound.
 			FailWithAction(inDataSize < sizeof(UInt32), theAnswer = kAudioHardwareBadPropertySizeError, Done, "NullAudio_GetDevicePropertyData: not enough space for the return value of kAudioDevicePropertyDeviceCanBeDefaultSystemDevice for the device");
-			*((UInt32*)outData) = 1;
+			*((UInt32*)outData) = 0;
 			*outDataSize = sizeof(UInt32);
 			break;
 
@@ -2354,25 +2348,7 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			switch(inAddress->mScope)
 			{
 				case kAudioObjectPropertyScopeGlobal:
-					//	global scope means return all streams
-					if(theNumberItemsToFetch > 2)
-					{
-						theNumberItemsToFetch = 2;
-					}
-					
-					//	fill out the list with as many objects as requested
-					if(theNumberItemsToFetch > 0)
-					{
-						((AudioObjectID*)outData)[0] = kObjectID_Stream_Input;
-					}
-					if(theNumberItemsToFetch > 1)
-					{
-						((AudioObjectID*)outData)[1] = kObjectID_Stream_Output;
-					}
-					break;
-					
-				case kAudioObjectPropertyScopeInput:
-					//	input scope means just the objects on the input side
+					//	global scope means return all streams (AudioCap: output only)
 					if(theNumberItemsToFetch > 1)
 					{
 						theNumberItemsToFetch = 1;
@@ -2381,8 +2357,12 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 					//	fill out the list with as many objects as requested
 					if(theNumberItemsToFetch > 0)
 					{
-						((AudioObjectID*)outData)[0] = kObjectID_Stream_Input;
+						((AudioObjectID*)outData)[0] = kObjectID_Stream_Output;
 					}
+					break;
+					
+				case kAudioObjectPropertyScopeInput:
+					theNumberItemsToFetch = 0;
 					break;
 					
 				case kAudioObjectPropertyScopeOutput:
@@ -2409,22 +2389,15 @@ static OSStatus	NullAudio_GetDevicePropertyData(AudioServerPlugInDriverRef inDri
 			//	number is allowed to be smaller than the actual size of the list. In such
 			//	case, only that number of items will be returned
 			theNumberItemsToFetch = inDataSize / sizeof(AudioObjectID);
-			if(theNumberItemsToFetch > 7)
+			if(theNumberItemsToFetch > 4)
 			{
-				theNumberItemsToFetch = 7;
+				theNumberItemsToFetch = 4;
 			}
 			
-			//	fill out the list with as many objects as requested, which is everything
+			//	fill out the list with as many objects as requested, which is everything (output side only)
 			for(theItemIndex = 0; theItemIndex < theNumberItemsToFetch; ++theItemIndex)
 			{
-				if(theItemIndex < 3)
-				{
-					((AudioObjectID*)outData)[theItemIndex] = kObjectID_Volume_Input_Master + theItemIndex;
-				}
-				else
-				{
-					((AudioObjectID*)outData)[theItemIndex] = kObjectID_Volume_Output_Master + (theItemIndex - 3);
-				}
+				((AudioObjectID*)outData)[theItemIndex] = kObjectID_Volume_Output_Master + theItemIndex;
 			}
 			
 			//	report how much we wrote
