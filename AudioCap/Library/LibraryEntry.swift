@@ -43,7 +43,7 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
     }
 
     let id: UUID
-    var sourceName: String
+    var source: TakeSource
     var startedAt: Date
     /// The exported file.
     var fileURL: URL
@@ -58,12 +58,12 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
     var status: Status
     /// Filled in once the exported file has been read back.
     var analysis: FileAnalysis?
-    /// The recorder's warning for a saved take (digital silence, dropped frames, timeline gaps).
-    var warning: String?
+    /// The recorder's warnings for a saved take (digital silence, dropped frames, timeline gaps).
+    var warnings: [TakeWarning]
 
     init(take: RecordingTake) {
         id = take.id
-        sourceName = take.sourceName
+        source = take.source
         startedAt = take.startedAt
         fileURL = take.outputURL
         captureURL = take.captureURL
@@ -73,8 +73,10 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
         capturedFrames = take.capturedFrames
         exportedFrames = take.exportedFrames
         status = Status(take.status)
-        warning = take.warning
+        warnings = take.warnings
     }
+
+    var sourceName: String { source.displayName() }
 
     var displayName: String { fileURL.deletingPathExtension().lastPathComponent }
 
@@ -106,6 +108,55 @@ struct LibraryEntry: Codable, Identifiable, Equatable, Sendable {
         exportedFrames = take.exportedFrames
         sampleRate = take.captureFormat.sampleRate
         channelCount = take.captureFormat.channelCount
-        warning = take.warning
+        warnings = take.warnings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, source, startedAt, fileURL, captureURL, outputFormat, sampleRate, channelCount, capturedFrames, exportedFrames,
+             status, analysis, warnings
+        /// Written by builds that stored the source name and the warnings as text.
+        case sourceName, warning
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        if let source = try container.decodeIfPresent(TakeSource.self, forKey: .source) {
+            self.source = source
+        } else {
+            source = TakeSource(legacyName: try container.decode(String.self, forKey: .sourceName))
+        }
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        fileURL = try container.decode(URL.self, forKey: .fileURL)
+        captureURL = try container.decode(URL.self, forKey: .captureURL)
+        outputFormat = try container.decode(RecordingSettings.OutputFormat.self, forKey: .outputFormat)
+        sampleRate = try container.decode(Double.self, forKey: .sampleRate)
+        channelCount = try container.decode(Int.self, forKey: .channelCount)
+        capturedFrames = try container.decode(Int64.self, forKey: .capturedFrames)
+        exportedFrames = try container.decodeIfPresent(Int64.self, forKey: .exportedFrames)
+        status = try container.decode(Status.self, forKey: .status)
+        analysis = try container.decodeIfPresent(FileAnalysis.self, forKey: .analysis)
+        if let warnings = try container.decodeIfPresent([TakeWarning].self, forKey: .warnings) {
+            self.warnings = warnings
+        } else {
+            warnings = try container.decodeIfPresent(String.self, forKey: .warning).map(TakeWarning.parseLegacy) ?? []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(source, forKey: .source)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(fileURL, forKey: .fileURL)
+        try container.encode(captureURL, forKey: .captureURL)
+        try container.encode(outputFormat, forKey: .outputFormat)
+        try container.encode(sampleRate, forKey: .sampleRate)
+        try container.encode(channelCount, forKey: .channelCount)
+        try container.encode(capturedFrames, forKey: .capturedFrames)
+        try container.encodeIfPresent(exportedFrames, forKey: .exportedFrames)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(analysis, forKey: .analysis)
+        try container.encode(warnings, forKey: .warnings)
     }
 }

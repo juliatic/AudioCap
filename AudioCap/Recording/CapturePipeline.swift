@@ -25,6 +25,8 @@ final class CapturePipeline: @unchecked Sendable {
         /// When set, an `AutoRecordMachine` on the writer queue decides when takes open and close.
         var autoRecord: AutoRecordMachine.Configuration?
         var mode: AutoRecordMachine.Mode = .manual
+        /// The source is "All system audio" (stored as a code so its name follows the language).
+        var isAllSystemAudio = false
     }
 
     /// Frames per `AutoRecordMachine` step: the resolution of sound detection, pre-roll and tail.
@@ -312,7 +314,7 @@ final class CapturePipeline: @unchecked Sendable {
             handler(.failed(String(localized: "Could not create the capture file: \(error.audioCapDescription)")))
             return false
         }
-        let take = RecordingTake(id: UUID(), sourceName: options.sourceName, startedAt: Date(), captureURL: captureURL,
+        let take = RecordingTake(id: UUID(), source: options.isAllSystemAudio ? .allSystemAudio : .app(name: options.sourceName), startedAt: Date(), captureURL: captureURL,
                                  outputURL: outputURL, outputFormat: options.outputFormat, captureFormat: format)
         self.take = take
         takePeak = 0
@@ -341,23 +343,15 @@ final class CapturePipeline: @unchecked Sendable {
             handler(.discarded(take.id))
             return
         }
-        var warnings: [String] = []
-        if takePeak == 0 {
-            warnings.append(String(localized: "Every sample in this take is 0 (digital silence). If \(take.sourceName) was playing, check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording."))
-        }
-        if takeOverflow > 0 {
-            warnings.append(String(localized: "\(takeOverflow) frames were dropped because the writer fell behind."))
-        }
+        var warnings: [TakeWarning] = []
+        if takePeak == 0 { warnings.append(.allZero) }
+        if takeOverflow > 0 { warnings.append(.droppedFrames(frames: takeOverflow)) }
         let reconnected = reconnects.exchange(0, ordering: .relaxed)
-        if reconnected > 0 {
-            warnings.append(String(localized: "The capture was reconnected \(reconnected) time(s) (output device change, source relaunch or wake); audio played during a reconnect is not in the take."))
-        }
+        if reconnected > 0 { warnings.append(.reconnected(count: reconnected)) }
         let jumps = discontinuities.exchange(0, ordering: .relaxed)
         let skipped = skippedFrames.exchange(0, ordering: .relaxed)
-        if jumps > 0 {
-            warnings.append(String(localized: "The audio device's timeline jumped \(jumps) time(s) (\(skipped) frames not delivered by CoreAudio)."))
-        }
-        take.warning = warnings.isEmpty ? nil : warnings.joined(separator: " ")
+        if jumps > 0 { warnings.append(.timelineJumps(count: jumps, skippedFrames: skipped)) }
+        take.warnings = warnings
         take.status = .exporting(progress: 0)
         handler(.closed(take))
     }

@@ -226,6 +226,7 @@ final class ProcessTapRecorder {
                                               sourceName: process.name, silenceDetector: detector,
                                               makeBaseName: { [weak self] in self?.uniqueBaseName() ?? UUID().uuidString })
         options.autoRecord = session.autoRecord
+        options.isAllSystemAudio = process.kind == .system
         options.mode = mode
         let pipeline = CapturePipeline(format: format, options: options) { [weak self] event in
             DispatchQueue.main.async { self?.handle(event) }

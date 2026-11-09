@@ -25,7 +25,7 @@ struct RecordingTake: Identifiable, Equatable, Sendable {
     }
 
     let id: UUID
-    let sourceName: String
+    let source: TakeSource
     let startedAt: Date
     /// The crash-safe CAF intermediate. Deleted after a successful export.
     let captureURL: URL
@@ -40,8 +40,12 @@ struct RecordingTake: Identifiable, Equatable, Sendable {
     var capturedFrames: AVAudioFramePosition = 0
     /// Frames in the exported file once completed (at the export's rate).
     var exportedFrames: AVAudioFramePosition?
-    /// A problem worth showing even though the take was saved (digital silence, dropped frames).
-    var warning: String?
+    /// Problems worth showing even though the take was saved (digital silence, dropped frames).
+    var warnings: [TakeWarning] = []
+
+    var sourceName: String { source.displayName() }
+    /// `warnings` in the current language, or `nil`.
+    var warning: String? { TakeWarning.text(warnings, source: source) }
 
     /// For example "96 kHz · 2 ch · Float32 · interleaved".
     var captureFormatDescription: String { captureFormat.description }

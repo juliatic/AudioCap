@@ -82,8 +82,8 @@ struct LibraryRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.displayName).fontWeight(.semibold)
                 Text(details).secondaryTextStyle()
-                if let warning = entry.warning {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
+                ForEach(Array(entry.warnings.enumerated()), id: \.offset) { _, warning in
+                    Label(warning.text(source: entry.source), systemImage: "exclamationmark.triangle.fill")
                         .warningTextStyle()
                         .textSelection(.enabled)
                 }

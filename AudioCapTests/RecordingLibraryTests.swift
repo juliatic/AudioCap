@@ -16,7 +16,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
 
     private func take(_ name: String = "Take", format: RecordingSettings.OutputFormat = .wav,
                       status: RecordingTake.Status = .recording, frames: Int64 = 0) throws -> RecordingTake {
-        var take = RecordingTake(id: UUID(), sourceName: "Music", startedAt: Date(timeIntervalSince1970: 1_800_000_000),
+        var take = RecordingTake(id: UUID(), source: .app(name: "Music"), startedAt: Date(timeIntervalSince1970: 1_800_000_000),
                                  captureURL: url("\(name).caf"), outputURL: url("\(name).\(format.fileExtension)"),
                                  outputFormat: format, captureFormat: try captureFormat())
         take.status = status
@@ -30,7 +30,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         library.apply(.added(recorded))
         recorded.status = .failed(message: "Disk full")
         recorded.capturedFrames = 96_000
-        recorded.warning = "Every sample in this take is 0 (digital silence)."
+        recorded.warnings = [.allZero]
         library.apply(.updated(recorded))
 
         let reloaded = RecordingLibrary(indexURL: indexURL)
@@ -44,7 +44,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         XCTAssertEqual(entry.capturedFrames, 96_000)
         XCTAssertEqual(entry.duration, 2, accuracy: 1e-9)
         XCTAssertEqual(entry.status, .failed(reason: "Disk full"))
-        XCTAssertEqual(entry.warning, recorded.warning)
+        XCTAssertEqual(entry.warnings, [.allZero])
     }
 
     func testTakesStillBusyWhenTheAppQuitReloadAsFailed() throws {
@@ -86,10 +86,9 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         let library = RecordingLibrary(indexURL: indexURL)
         var recorded = try take()
         library.apply(.added(recorded))
-        XCTAssertNil(library.entries.first?.warning)
+        XCTAssertEqual(library.entries.first?.warnings, [])
 
-        let note = "The capture was reconnected 2 time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take."
-        recorded.warning = note
+        recorded.warnings = [.reconnected(count: 2)]
         recorded.status = .exporting(progress: 0)
         library.apply(.updated(recorded))
         recorded.status = .completed
@@ -97,8 +96,7 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
 
         let entry = try XCTUnwrap(RecordingLibrary(indexURL: indexURL).entries.first)
         XCTAssertEqual(entry.status, .done)
-        XCTAssertEqual(entry.warning, note)
-        XCTAssertFalse(entry.warning?.contains("timeline jumped") == true)
+        XCTAssertEqual(entry.warnings, [.reconnected(count: 2)])
     }
 
     func testRecorderEventsDriveStatusAndLateProgressIsIgnored() async throws {
