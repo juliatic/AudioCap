@@ -98,6 +98,11 @@ struct RecordingView: View {
                 .disabled(isLocked)
             }
 
+            if let warning = recorder.silenceWarning {
+                Label(warning, systemImage: "speaker.slash")
+                    .warningTextStyle()
+            }
+
             if let error = recorder.lastError {
                 Text(error)
                     .errorTextStyle()
@@ -184,6 +189,11 @@ private struct TakeRow: View {
                     .truncationMode(.middle)
                 Text("\(take.captureFormat.displayDescription) → \(take.outputFormat.displayName) · \(take.duration.formatted(.number.precision(.fractionLength(3)))) s")
                     .secondaryTextStyle()
+                if let warning = take.warning {
+                    Text(warning)
+                        .warningTextStyle()
+                        .textSelection(.enabled)
+                }
                 if case .failed(let message) = take.status {
                     Text(message)
                         .errorTextStyle()

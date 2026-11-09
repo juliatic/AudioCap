@@ -56,6 +56,8 @@ enum AppStyle {
     static let secondaryText = AdaptiveColor(light: RGB(0x595959), dark: RGB(0xB8B8B8))
     /// Errors and the "Recording" state. System red is about 3.5:1 on white, too low for text.
     static let errorText = AdaptiveColor(light: RGB(0xB3261E), dark: RGB(0xFF8A80))
+    /// Warnings (silent capture, dropped frames). System orange is about 2.2:1 on white.
+    static let warningText = AdaptiveColor(light: RGB(0x8A4B00), dark: RGB(0xFFB454))
 
     /// Backgrounds text sits on: window, grouped-form section and its darkest/lightest neighbours.
     static let lightBackgrounds = [RGB(0xFFFFFF), RGB(0xF5F5F5), RGB(0xECECEC), RGB(0xE5E5E5)]
@@ -74,6 +76,11 @@ extension View {
     /// Secondary text in a colour that keeps 4.5:1 contrast.
     func secondaryTextStyle() -> some View {
         font(AppStyle.detail).foregroundStyle(AppStyle.secondaryText.color)
+    }
+
+    /// Warning text in a colour that keeps 4.5:1 contrast.
+    func warningTextStyle() -> some View {
+        font(AppStyle.detail).foregroundStyle(AppStyle.warningText.color)
     }
 
     /// Error text in a colour that keeps 4.5:1 contrast.

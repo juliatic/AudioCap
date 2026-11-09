@@ -13,7 +13,7 @@ final class AppStyleTests: XCTestCase {
     }
 
     func testTextColoursReachAAContrastInLightAndDarkMode() {
-        for colour in [AppStyle.secondaryText, AppStyle.errorText] {
+        for colour in [AppStyle.secondaryText, AppStyle.errorText, AppStyle.warningText] {
             for background in AppStyle.lightBackgrounds {
                 XCTAssertGreaterThanOrEqual(colour.light.contrast(with: background), 4.5, "light \(colour.light) on \(background)")
             }

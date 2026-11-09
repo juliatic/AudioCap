@@ -21,6 +21,11 @@ extension AudioObjectID {
         (try? read(kAudioProcessPropertyPID, defaultValue: pid_t(-1))).flatMap { $0 > 0 ? $0 : nil }
     }
 
+    /// `kAudioProcessPropertyIsRunningOutput`: the process is currently playing audio.
+    func readProcessIsRunningOutput() -> Bool {
+        (try? readBool(kAudioProcessPropertyIsRunningOutput)) ?? false
+    }
+
     /// The stream objects of a device in `scope`.
     func readStreams(scope: AudioObjectPropertyScope) throws -> [AudioStreamID] {
         try readArray(AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: scope, mElement: kAudioObjectPropertyElementMain))

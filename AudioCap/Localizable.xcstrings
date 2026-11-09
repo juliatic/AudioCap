@@ -33,6 +33,27 @@
         }
       }
     },
+    "%@ is playing but AudioCap only receives silence. Check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ está sonando, pero AudioCap solo recibe silencio. Comprueba que AudioCap tiene permiso en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema; después detén la grabación y vuelve a empezar."
+          }
+        }
+      }
+    },
+    "%@ is playing but the capture is silent. Reconnecting to it…" : {
+      "comment" : "Shown while recording when the source app is playing but the tap delivers only zeros. The argument is the app name.",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ está sonando, pero la captura está en silencio. Reconectando…"
+          }
+        }
+      }
+    },
     "%@ · %lld ch · %@ · interleaved" : {
       "comment" : "Capture format: sample rate · channel count · sample type · buffer layout.",
       "localizations" : {
@@ -116,6 +137,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld dB"
+          }
+        }
+      }
+    },
+    "%lld frames were dropped because the writer fell behind." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se perdieron %lld tramas porque la escritura del archivo se quedó atrás."
           }
         }
       }
@@ -280,6 +311,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "crear la captura de audio del proceso"
+          }
+        }
+      }
+    },
+    "Every sample in this take is 0 (digital silence). If %@ was playing, check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todas las muestras de esta toma valen 0 (silencio digital). Si %@ estaba sonando, comprueba que AudioCap tiene permiso en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema."
           }
         }
       }
@@ -610,12 +651,32 @@
         }
       }
     },
+    "The aggregate device has no readable input stream format." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El dispositivo agregado no tiene ningún formato de entrada legible."
+          }
+        }
+      }
+    },
     "The aggregate device is not available." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "El dispositivo agregado no está disponible."
+          }
+        }
+      }
+    },
+    "The audio device's timeline jumped %lld time(s) (%lld frames not delivered by CoreAudio)." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saltos en la línea de tiempo del dispositivo de audio: %1$lld (CoreAudio no entregó %2$lld tramas)."
           }
         }
       }

@@ -32,7 +32,7 @@ Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact r
 - A VM without an audio output device makes the tap fail with `'!obj'` (`560947818`). A virtual output (for example BlackHole on a throwaway VM) gives the system a device; do not change audio devices on a machine other projects use.
 - Play a known file with `timeout 30 afplay <file> &` and pick `afplay` in the process list.
 - Each ad-hoc rebuild installed into `/Applications` (and the bundle-id change) can bring the audio-capture permission prompt back on first launch.
-- Observed on the build VM: right after `tccutil reset` and a fresh **Allow**, the running app recorded silence (peak 0.0); after relaunching it the same tone recorded normally. Relaunch before judging a capture made just after granting.
+- Observed on the build VM before the engine stopped adding the output device as an aggregate sub-device: right after `tccutil reset` and a fresh **Allow**, the running app recorded silence (peak 0.0) until relaunched. The engine now warns on a silent take (`silenceWarning`, `take.warning`); if a first take after granting is still silent, record that in the PR.
 - Show the permission prompt again: `tccutil reset AudioCapture <bundle id>` (`codes.rambo.samplecode.AudioCap` upstream, `io.github.juliatic.AudioCap` after the bundle-id change). Starting a recording may also trigger the microphone prompt.
 - App logs: `timeout 30 log show --last 5m --style compact --predicate 'process == "AudioCap"'`.
 - Check the result file with the duration check in `audiocap-audio-quality`; a 4,096-byte WAV with `duration=N/A` is an empty file (header only).
