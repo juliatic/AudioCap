@@ -40,8 +40,8 @@ final class TakeWarningTests: XCTestCase {
         XCTAssertEqual(TakeSource.allSystemAudio.displayName(), "All system audio")
         XCTAssertEqual(TakeWarning.droppedFrames(frames: 256).text(source: .app(name: "afplay")),
                        "256 frames were dropped because the writer fell behind.")
-        XCTAssertEqual(TakeWarning.timelineJumps(count: 3, skippedFrames: 512).text(source: .app(name: "afplay")),
-                       "The audio device's timeline jumped 3 time(s) (512 frames not delivered by CoreAudio).")
+        XCTAssertEqual(TakeWarning.timelineJumps(count: 3, skippedFrames: 300).text(source: .app(name: "afplay")),
+                       "The audio device's timeline jumped 3 time(s) (300 frames not delivered by CoreAudio). Around each jump the source's audio usually skips about as much again, so up to 900 frames may be missing.")
         XCTAssertTrue(TakeWarning.allZero.text(source: .allSystemAudio).contains("If All system audio was playing"))
         XCTAssertTrue(TakeWarning.dropouts(count: 1, frames: 480, seconds: 0.01).text(source: .app(name: "afplay"))
             .hasPrefix("CoreAudio delivered digital zeros instead of afplay's audio 1 time(s)"))
@@ -53,8 +53,8 @@ final class TakeWarningTests: XCTestCase {
         XCTAssertEqual(TakeSource.app(name: "Música").displayName(bundle: es), "Música")
         XCTAssertEqual(TakeWarning.droppedFrames(frames: 256).text(source: .app(name: "afplay"), bundle: es),
                        "Se perdieron 256 tramas porque la escritura del archivo se quedó atrás.")
-        XCTAssertEqual(TakeWarning.timelineJumps(count: 3, skippedFrames: 512).text(source: .app(name: "afplay"), bundle: es),
-                       "Saltos en la línea de tiempo del dispositivo de audio: 3 (CoreAudio no entregó 512 tramas).")
+        XCTAssertEqual(TakeWarning.timelineJumps(count: 3, skippedFrames: 300).text(source: .app(name: "afplay"), bundle: es),
+                       "Saltos en la línea de tiempo del dispositivo de audio: 3 (CoreAudio no entregó 300 tramas). En cada salto el audio de la fuente suele perder otro tanto, así que pueden faltar hasta 900 tramas.")
         XCTAssertEqual(TakeWarning.reconnected(count: 2).text(source: .app(name: "afplay"), bundle: es),
                        "Reconexiones de la captura: 2 (cambio de dispositivo de salida, reinicio del origen o reactivación); el audio que sonó durante una reconexión no está en la toma.")
         XCTAssertTrue(TakeWarning.allZero.text(source: .allSystemAudio, bundle: es).contains("Si Todo el audio del sistema estaba sonando"))

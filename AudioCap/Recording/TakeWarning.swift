@@ -56,7 +56,9 @@ enum TakeWarning: Codable, Hashable, Sendable {
         case .reconnected(let count):
             return String(localized: "The capture was reconnected \(count) time(s) (output device change, source relaunch or wake); audio played during a reconnect is not in the take.", bundle: bundle)
         case .timelineJumps(let count, let skippedFrames):
+            let bound = CapturePipeline.jumpLossBound * skippedFrames
             return String(localized: "The audio device's timeline jumped \(count) time(s) (\(skippedFrames) frames not delivered by CoreAudio).", bundle: bundle)
+                + " " + String(localized: "Around each jump the source's audio usually skips about as much again, so up to \(bound) frames may be missing.", bundle: bundle)
         case .dropouts(let count, let frames, let seconds):
             let sourceName = source.displayName(bundle: bundle)
             let secondsText = seconds.formatted(.number.precision(.fractionLength(3)))

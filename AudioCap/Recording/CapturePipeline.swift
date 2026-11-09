@@ -152,6 +152,12 @@ final class CapturePipeline: @unchecked Sendable {
     /// The last take ended with an abrupt cut while the source played; the next take may continue its passage.
     private var pendingSplit: (id: RecordingTake.ID, trailingZeros: Int)?
     private var lastTakeTrailingZeros = 0
+    /// Frames not delivered since the last non-zero sample, and that count at the first sound since the previous
+    /// take closed (see `countUncaptured`); the current read's sound and what was not delivered after it.
+    private var uncapturedSinceSound = 0
+    private var chunkSound: (first: Int, last: Int)?
+    private var uncapturedAfterChunkSound = 0
+    private var onsetUncapturedFrames: Int?
     private var pendingLateStart: CaptureTimelineLog.Entry?
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
@@ -243,6 +249,7 @@ final class CapturePipeline: @unchecked Sendable {
             }
             refreshGap = Int((gapSeconds * format.sampleRate).rounded())
             idleRefreshGapFrames.add(refreshGap, ordering: .relaxed)
+            if refreshGap > 0 { timeline.push(.init(kind: .refreshGap, position: ring.producedFrames, frames: refreshGap)) }
             framesSinceRefresh = 0
         }
         if let time, time.pointee.mFlags.contains(.hostTimeValid) {
@@ -368,6 +375,11 @@ final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// Upper bound on the frames missing at timeline jumps, as a multiple of the frames CoreAudio reports skipped.
+    /// Measured: at a jump the source's audio skips about as much again (1.9-2.4x the jump in total), which no
+    /// timestamp shows.
+    static let jumpLossBound = 3
+
     /// Drains the ring now instead of waiting for the timer, so a test producer can't outrun a busy writer queue.
     func drainNow() {
         queue.sync { drain() }
@@ -395,6 +407,7 @@ final class CapturePipeline: @unchecked Sendable {
             scratch.frameLength = AVAudioFrameCount(count)
             takeOverflow += ring.overflowFrames.exchange(0, ordering: .relaxed)
 
+            noteSound(in: scratch, at: read)
             if writer == nil {
                 framesWithoutTake += count
                 if !sourceIsOutputting.load(ordering: .relaxed) { (pendingSplit, lastTakeTrailingZeros) = (nil, 0) }
@@ -425,11 +438,44 @@ final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// Ring positions of the first and last non-zero frame of the read starting at `position`, for `chargeTimeline`.
+    private func noteSound(in buffer: AVAudioPCMBuffer, at position: Int) {
+        chunkSound = nil
+        guard let data = buffer.floatChannelData else { return }
+        let frames = Int(buffer.frameLength)
+        var peak: Float = 0
+        for c in 0..<channelCount {
+            var channelPeak: Float = 0
+            vDSP_maxmgv(data[c], 1, &channelPeak, vDSP_Length(frames))
+            peak = max(peak, channelPeak)
+        }
+        guard peak > 0 else { return }
+        let isZero = { (i: Int) in (0..<self.channelCount).allSatisfy { data[$0][i] == 0 } }
+        var first = 0
+        while isZero(first) { first += 1 }
+        var last = frames - 1
+        while isZero(last) { last -= 1 }
+        chunkSound = (position + first, position + last)
+    }
+
+    /// Counts the frames CoreAudio never delivered (timeline jumps, idle refresh gaps) since the last non-zero
+    /// sample, and snapshots that count at the first sound after a take closed, so a split gap includes them.
+    private func countUncaptured(_ entry: CaptureTimelineLog.Entry) {
+        guard entry.kind == .jump || entry.kind == .refreshGap else { return }
+        guard let sound = chunkSound else { return uncapturedSinceSound += entry.frames }
+        if entry.position <= sound.first {
+            uncapturedSinceSound += entry.frames
+        } else if entry.position > sound.last {
+            uncapturedAfterChunkSound += entry.frames
+        }
+    }
+
     /// Charges the timeline entries of the frames read so far to the open take, or drops them while none is open.
     /// A late start seen while no take is open is kept for a take that opens shortly after.
     private func chargeTimeline() {
         let isTakeOpen = writer != nil
         timeline.consume(before: ring.consumedFrames) { entry in
+            countUncaptured(entry)
             guard isTakeOpen else {
                 if entry.kind == .lateStart { pendingLateStart = entry }
                 return
@@ -442,8 +488,15 @@ final class CapturePipeline: @unchecked Sendable {
                 break // the take's writer finds these with `takeZeros`, along with holes inside a cycle
             case .lateStart:
                 takeLateStartFrames = max(takeLateStartFrames ?? 0, entry.frames)
+            case .refreshGap:
+                break // only while no take is open; counted in `uncapturedSinceSound` for a split gap
             }
         }
+        if chunkSound != nil {
+            if onsetUncapturedFrames == nil { onsetUncapturedFrames = uncapturedSinceSound }
+            uncapturedSinceSound = uncapturedAfterChunkSound
+        }
+        (chunkSound, uncapturedAfterChunkSound) = (nil, 0)
     }
 
     private static func isAllZero(_ buffer: AVAudioPCMBuffer, channels: Int) -> Bool {
@@ -788,9 +841,11 @@ struct PassageEdges {
 
     /// Zero frames between an abrupt end and the next take's abrupt onset: the earlier take's trailing zeros, the
     /// frames read while no take was open (less those the next take received when it opened, its pre-roll), and the
-    /// next take's leading zeros.
-    static func splitGapFrames(previousTrailingZeros: Int, framesWithoutTake: Int, openingFrames: Int, leadingZeros: Int) -> Int {
-        previousTrailingZeros + max(0, framesWithoutTake - openingFrames) + leadingZeros
+    /// next take's leading zeros, plus the frames CoreAudio never delivered in between (timeline jumps and idle
+    /// refresh gaps), so the gap is real time rather than captured frames.
+    static func splitGapFrames(previousTrailingZeros: Int, framesWithoutTake: Int, openingFrames: Int, leadingZeros: Int,
+                               uncapturedFrames: Int = 0) -> Int {
+        previousTrailingZeros + max(0, framesWithoutTake - openingFrames) + leadingZeros + uncapturedFrames
     }
 }
 
@@ -808,11 +863,13 @@ extension CapturePipeline {
             let gap = PassageEdges.splitGapFrames(previousTrailingZeros: pending.trailingZeros,
                                                   framesWithoutTake: takeFramesBeforeOpen,
                                                   openingFrames: takeOpeningFrames ?? 0,
-                                                  leadingZeros: takeEdges.leadingZeros)
+                                                  leadingZeros: takeEdges.leadingZeros,
+                                                  uncapturedFrames: onsetUncapturedFrames ?? 0)
             warnings.append(.splitFromPrevious(gapSeconds: seconds(gap)))
             handler(.amended(pending.id, warning: .splitIntoNext(gapSeconds: seconds(gap))))
         }
         pendingSplit = nil
+        onsetUncapturedFrames = nil
         lastTakeTrailingZeros = takeEdges.sourceKeptPlaying ? takeEdges.trailingZeros : 0
         if let end = takeEdges.abruptEndFrame {
             warnings.append(.abruptEnd(atSeconds: seconds(end)))
@@ -946,7 +1003,7 @@ struct ZeroSpanMeter {
 }
 
 final class CaptureTimelineLog: @unchecked Sendable {
-    enum Kind: UInt8 { case jump, dropout, lateStart }
+    enum Kind: UInt8 { case jump, dropout, lateStart, refreshGap }
     struct Entry { var kind: Kind; var position: Int; var frames: Int }
 
     static let capacity = 256

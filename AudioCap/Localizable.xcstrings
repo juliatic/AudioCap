@@ -2025,6 +2025,16 @@
         }
       }
     },
+    "Around each jump the source's audio usually skips about as much again, so up to %lld frames may be missing." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En cada salto el audio de la fuente suele perder otro tanto, así que pueden faltar hasta %lld tramas."
+          }
+        }
+      }
+    },
     "The audio device's timeline jumped %lld time(s) (%lld frames not delivered by CoreAudio)." : {
       "localizations" : {
         "es" : {
