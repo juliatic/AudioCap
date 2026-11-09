@@ -65,6 +65,11 @@ final class CapturePipeline: @unchecked Sendable {
     private let phaseCode = Atomic<Int>(0)
     /// Silence splitting (manual mode only); "Wait for sound" closes takes by itself.
     private let splitEnabled = Atomic<Bool>(true)
+    /// Reconnects (device rebuilds, tap recreation) during the current take.
+    let reconnects = Atomic<Int>(0)
+    private let signalSeen = Atomic<Bool>(false)
+    /// `true` once any non-zero sample has arrived in this pipeline.
+    var hasSeenSignal: Bool { signalSeen.load(ordering: .relaxed) }
 
     private let options: Options
     private let handler: (Event) -> Void
@@ -180,6 +185,7 @@ final class CapturePipeline: @unchecked Sendable {
             digitalSilenceRun.add(layout.frames, ordering: .relaxed)
         } else {
             digitalSilenceRun.store(0, ordering: .relaxed)
+            signalSeen.store(true, ordering: .relaxed)
         }
 
         if detector != nil, splitEnabled.load(ordering: .relaxed) {
@@ -188,6 +194,13 @@ final class CapturePipeline: @unchecked Sendable {
             if analysis.shouldDrop { return }
         }
         ring.commitStaged()
+    }
+
+    /// Marks a deliberate restart of the device: the next cycle's sample time starts a new timeline and is not
+    /// counted as a discontinuity. Call on the I/O queue while the producer is gated.
+    func noteReconnect() {
+        nextSampleTime = -1
+        reconnects.add(1, ordering: .relaxed)
     }
 
     // MARK: - Writer queue
@@ -334,6 +347,10 @@ final class CapturePipeline: @unchecked Sendable {
         }
         if takeOverflow > 0 {
             warnings.append("\(takeOverflow) frames were dropped because the writer fell behind.")
+        }
+        let reconnected = reconnects.exchange(0, ordering: .relaxed)
+        if reconnected > 0 {
+            warnings.append("The capture was reconnected \(reconnected) time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take.")
         }
         let jumps = discontinuities.exchange(0, ordering: .relaxed)
         let skipped = skippedFrames.exchange(0, ordering: .relaxed)
