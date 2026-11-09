@@ -57,6 +57,8 @@ final class ProcessTap {
     @ObservationIgnored private(set) var aggregateFormatSource: String?
     @ObservationIgnored private(set) var aggregateSampleRate: Double?
     @ObservationIgnored private(set) var aggregateOutputDevice: OutputDeviceInfo?
+    /// UID of the default output when the tap was created; rebuilding only the aggregate on another output keeps it.
+    @ObservationIgnored private(set) var tapOutputUID: String?
     @ObservationIgnored private(set) var lastFormatValidationError: String?
     /// One line per input stream of the aggregate device, in buffer-list order.
     @ObservationIgnored private(set) var aggregateInputStreams: [String] = []
@@ -306,6 +308,7 @@ final class ProcessTap {
         self.tapStreamDescription = try? tapID.readAudioTapStreamBasicDescription()
 
         try createAggregateDevice()
+        tapOutputUID = aggregateOutputDevice?.uid
     }
 
     /// Creates the private aggregate device with the current default output device as its clock and the tap as input.
