@@ -58,6 +58,7 @@ final class HiResController {
     func recoverOnLaunch() {
         guard !didRecover else { return }
         didRecover = true
+        QualityPathContributors.register(HiResQualityContributor.shared)
         if let restored = router.recoverAfterCrash() {
             message = String(localized: "Restored the output to \(restored.name) after AudioCap last quit unexpectedly.")
         }

@@ -15,8 +15,7 @@ struct AutoRecordControls: View {
 
             if settings.mode == .waitForSound {
                 Text("Start arms the recorder: a take opens when sound arrives, with half a second of pre-roll, and closes after the silence below. Stop disarms.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .secondaryTextStyle()
                     .fixedSize(horizontal: false, vertical: true)
 
                 LabeledContent("Sound threshold") {
@@ -40,7 +39,7 @@ struct AutoRecordControls: View {
 
                 if recorder.isWaitingForSound {
                     Label("Waiting for sound…", systemImage: "waveform.badge.magnifyingglass")
-                        .foregroundStyle(.orange)
+                        .warningTextStyle()
                 }
             }
         }

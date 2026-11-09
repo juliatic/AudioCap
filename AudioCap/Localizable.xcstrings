@@ -66,23 +66,12 @@
         }
       }
     },
-    "%@ is playing but AudioCap only receives silence. Check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again." : {
+    "%@ is playing but AudioCap has only received digital silence so far. This is expected during a silent intro. If you hear audio, check that AudioCap is allowed in System Settings › Privacy & Security › Screen & System Audio Recording, then stop and start again." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ está sonando, pero AudioCap solo recibe silencio. Comprueba que AudioCap tiene permiso en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema; después detén la grabación y vuelve a empezar."
-          }
-        }
-      }
-    },
-    "%@ is playing but the capture is silent. Reconnecting to it…" : {
-      "comment" : "Shown while recording when the source app is playing but the tap delivers only zeros. The argument is the app name.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ está sonando, pero la captura está en silencio. Reconectando…"
+            "value" : "%@ está sonando, pero de momento AudioCap solo ha recibido silencio digital. Es normal si la pista empieza en silencio. Si oyes audio, comprueba que AudioCap tiene permiso en Ajustes del Sistema › Privacidad y seguridad › Grabación de pantalla y audio del sistema; después detén la grabación y vuelve a empezar."
           }
         }
       }
@@ -100,6 +89,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ está a %2$@. Volverá a %3$@ al terminar la grabación."
+          }
+        }
+      }
+    },
+    "%@ · %@ · %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@ · %3$@"
           }
         }
       }
@@ -166,27 +165,6 @@
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "%@ → %@ · %@ s" : {
-      "comment" : "Take details: capture format → export format · duration in seconds.",
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ → %2$@ · %3$@ s"
-          }
-        }
-      }
-    },
-    "%lld dB" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld dB"
           }
         }
       }
@@ -1749,22 +1727,45 @@
         }
       }
     },
+    "Setting %@ to %lf Hz" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cambiar %1$@ a %2$lf Hz"
+          }
+        }
+      },
+      "comment" : "Operation name, inserted into \"%@ failed with %@.\""
+    },
+    "Setting the default output to %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cambiar la salida predeterminada a %@"
+          }
+        }
+      },
+      "comment" : "Operation name, inserted into \"%@ failed with %@.\""
+    },
+    "Setting the nominal sample rate to %lf Hz" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cambiar la frecuencia de muestreo nominal a %lf Hz"
+          }
+        }
+      },
+      "comment" : "Operation name, inserted into \"%@ failed with %@.\""
+    },
     "Show %@ in Finder" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mostrar %@ en el Finder"
-          }
-        }
-      }
-    },
-    "Show Capture" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mostrar captura"
           }
         }
       }
@@ -1890,13 +1891,12 @@
         }
       }
     },
-    "Takes" : {
-      "comment" : "Section title: the recordings made in this session.",
+    "System" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tomas"
+            "value" : "Sistema"
           }
         }
       }
@@ -2058,12 +2058,12 @@
         }
       }
     },
-    "The capture was reconnected %lld time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take." : {
+    "The capture was reconnected %lld time(s) (output device change, source relaunch or wake); audio played during a reconnect is not in the take." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reconexiones de la captura: %lld (cambio de dispositivo de salida, reactivación o recuperación del silencio); el audio que sonó durante una reconexión no está en la toma."
+            "value" : "Reconexiones de la captura: %lld (cambio de dispositivo de salida, reinicio del origen o reactivación); el audio que sonó durante una reconexión no está en la toma."
           }
         }
       }
@@ -2692,6 +2692,17 @@
           }
         }
       }
+    },
+    "—" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      },
+      "comment" : "Placeholder for a value that is not known."
     }
   },
   "version" : "1.0"

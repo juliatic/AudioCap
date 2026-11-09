@@ -101,7 +101,7 @@ struct PlayerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(entry.displayName).font(.headline)
+                Text(entry.displayName).font(AppStyle.headline)
                 Spacer()
                 Button("Close Player", systemImage: "xmark.circle.fill", action: onClose)
                     .labelStyle(.iconOnly)
@@ -129,7 +129,7 @@ struct PlayerView: View {
             lengthComparison
 
             if let error = model.errorMessage {
-                Text(error).foregroundStyle(.red)
+                Text(error).errorTextStyle()
             }
         }
         .padding(.vertical, 4)
@@ -146,10 +146,10 @@ struct PlayerView: View {
                 }
             }
             if analysis.lengthMatches, entry.lengthIsConsistent != false {
-                Label("Lengths match", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label { Text("Lengths match") } icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
             } else {
                 Label("Length mismatch: players may stop early or keep playing past the shown length", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .warningTextStyle()
             }
         } else {
             ProgressView().controlSize(.small)

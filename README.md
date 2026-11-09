@@ -4,23 +4,19 @@
 
 AudioCap records the sound of one app on your Mac (Music, Spotify, a browser…) straight from macOS, using CoreAudio **process taps**. No loopback driver, no microphone, no re-recording through the speakers.
 
-This fork is being reworked after recording stopped working on a recent macOS update. The plan is in [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). This README marks clearly what the app does **today** and what is **planned**.
+This fork is being reworked after recording stopped working on a recent macOS update. The plan is in [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). This README lists what the app did before the rework and what is **new in this version**.
 
 ![Architecture of the recording pipeline](docs/img/architecture.svg)
 
 ## Features
 
-Available today:
+Before the rework:
 - Pick any app that is playing audio and record only that app.
 - Save as WAV (32-bit float), M4A (AAC) or FLAC.
 - Optional split into separate files on silence, with a threshold (dB) and a minimum silence length (seconds).
 - Spanish and English interface that follows the macOS language, text of at least 16 pt, high-contrast colours, VoiceOver labels and keyboard control (**⌘R** starts and stops).
 
-Known problems in the current build (fixed by the new recording engine, PR 1):
-- On recent macOS versions, starting a WAV recording can fail with error `1718449215` (`'fmt?'`), or the file can stay empty.
-- FLAC files lose the last fraction of a second, and some files report a different length than the audio they contain.
-
-Planned (see the plan for details):
+New in this version (details in the plan):
 - **New recording engine** (PR 1): lossless CAF capture, FLAC 24-bit, ALAC, WAV Float32, AAC 256 kbps; length check on every file; decoded error codes with a **Copy diagnostics** button.
 - **Auto-record** (PR 3, "Wait for sound", the default): click **Start** to arm; a take starts when the source makes sound (with half a second of pre-roll) and ends after 2 s of silence (configurable), then it waits again. **Manual** mode records from Start to Stop. Plus an "All system audio" source (everything except AudioCap).
 - **Library and player** (PR 4): every take with its status (recording, converting, done, failed), a player with waveform, a level meter, a **Quality** panel and the output folder `~/Music/AudioCap`.

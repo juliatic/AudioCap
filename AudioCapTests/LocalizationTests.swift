@@ -45,7 +45,7 @@ final class LocalizationTests: XCTestCase {
 
     func testInfoPlistStringsAreTranslated() throws {
         let strings = try catalog("InfoPlist.xcstrings")
-        for key in ["NSAudioCaptureUsageDescription", "NSMicrophoneUsageDescription"] {
+        for key in ["NSAudioCaptureUsageDescription", "NSAppleEventsUsageDescription"] {
             XCTAssertFalse(spanishValues(try XCTUnwrap(strings[key], key)).isEmpty, key)
         }
     }

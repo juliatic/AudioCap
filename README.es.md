@@ -4,23 +4,19 @@
 
 AudioCap graba el sonido de una sola app de tu Mac (Música, Spotify, un navegador…) directamente desde macOS, con los **taps de proceso** de CoreAudio. Sin drivers de bucle, sin micrófono y sin volver a grabar lo que sale por los altavoces.
 
-Este fork se está rehaciendo porque la grabación dejó de funcionar tras una actualización reciente de macOS. El plan está en [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). En este README queda claro qué hace la app **hoy** y qué está **previsto**.
+Este fork se está rehaciendo porque la grabación dejó de funcionar tras una actualización reciente de macOS. El plan está en [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). Este README indica qué hacía la app antes de rehacerla y qué es **nuevo en esta versión**.
 
 ![Arquitectura de la cadena de grabación](docs/img/architecture.es.svg)
 
 ## Funciones
 
-Disponible hoy:
+Antes de rehacerla:
 - Elige cualquier app que esté sonando y graba solo esa app.
 - Guarda en WAV (coma flotante de 32 bits), M4A (AAC) o FLAC.
 - Opción de partir la grabación en varios archivos al detectar silencio, con un umbral (dB) y una duración mínima del silencio (segundos).
 - Interfaz en español e inglés que sigue el idioma de macOS, con texto de 16 pt como mínimo, colores de alto contraste, etiquetas para VoiceOver y control con el teclado (**⌘R** empieza y detiene la grabación).
 
-Problemas conocidos de la versión actual (los resuelve el nuevo motor de grabación, PR 1):
-- En versiones recientes de macOS, empezar a grabar en WAV puede fallar con el error `1718449215` (`'fmt?'`), o el archivo puede quedarse vacío.
-- A los FLAC les falta la última fracción de segundo, y algunos archivos indican una duración distinta del audio que contienen.
-
-Previsto (los detalles están en el plan):
+Novedades de esta versión (los detalles están en el plan):
 - **Nuevo motor de grabación** (PR 1): captura sin pérdida en CAF, FLAC de 24 bits, ALAC, WAV Float32 y AAC a 256 kbps; comprobación de duración en cada archivo; códigos de error descifrados y un botón **Copiar diagnóstico**.
 - **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con medio segundo previo) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
 - **Biblioteca y reproductor** (PR 4): cada toma con su estado (grabando, convirtiendo, lista, con error), un reproductor con forma de onda, un medidor de nivel, un panel de **Calidad** y la carpeta de destino `~/Music/AudioCap`.

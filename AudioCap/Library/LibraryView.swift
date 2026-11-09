@@ -18,11 +18,11 @@ struct LibrarySection: View {
             }
 
             if let error = library.lastError {
-                Text(error).foregroundStyle(.secondary)
+                Text(error).secondaryTextStyle()
             }
 
             if library.entries.isEmpty {
-                Text("No recordings yet.").foregroundStyle(.secondary)
+                Text("No recordings yet.").secondaryTextStyle()
             }
             ForEach(library.entries) { entry in
                 LibraryRow(entry: entry, isPlaying: player.entryID == entry.id,
@@ -81,10 +81,10 @@ struct LibraryRow: View {
             statusIcon.frame(width: 20)
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.displayName).fontWeight(.semibold)
-                Text(details).foregroundStyle(.secondary)
+                Text(details).secondaryTextStyle()
                 if let warning = entry.warning {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .warningTextStyle()
                         .textSelection(.enabled)
                 }
                 statusView
@@ -142,7 +142,7 @@ struct LibraryRow: View {
     private var statusView: some View {
         switch entry.status {
         case .recording:
-            Text("Recording").foregroundStyle(.red)
+            Text("Recording").errorTextStyle()
         case .converting(let progress):
             HStack {
                 ProgressView(value: progress).frame(maxWidth: 160)
@@ -150,12 +150,12 @@ struct LibraryRow: View {
             }
         case .done:
             if entry.lengthIsConsistent == false {
-                Text("Done, but the file's length doesn't match the capture").foregroundStyle(.orange)
+                Text("Done, but the file's length doesn't match the capture").warningTextStyle()
             } else {
                 Text("Done").foregroundStyle(.green)
             }
         case .failed(let reason):
-            Text("Failed: \(reason)").foregroundStyle(.red)
+            Text("Failed: \(reason)").errorTextStyle()
         }
     }
 
@@ -191,7 +191,7 @@ struct OutputFolderRow: View {
                 }
             }
             if let message = error ?? folder.lastError {
-                Text(message).foregroundStyle(.red)
+                Text(message).errorTextStyle()
             }
         }
     }

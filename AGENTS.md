@@ -4,9 +4,9 @@ Canonical instructions for humans and for every AI coding tool working in this r
 
 ## What AudioCap is
 
-AudioCap is a macOS SwiftUI app that records the audio output of one chosen app (or, planned, the whole system) through **CoreAudio process taps** (macOS 14.4+), without loopback drivers. It writes a lossless capture and exports it to the format the user picks. It started as the upstream sample [insidegui/AudioCap](https://github.com/insidegui/AudioCap); this fork turns it into a reliable recorder. The approved roadmap is [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md).
+AudioCap is a macOS SwiftUI app that records the audio output of one chosen app (or the whole system, "All system audio") through **CoreAudio process taps** (macOS 14.4+), without loopback drivers. It writes a lossless capture and exports it to the format the user picks. It started as the upstream sample [insidegui/AudioCap](https://github.com/insidegui/AudioCap); this fork turns it into a reliable recorder. The approved roadmap is [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md).
 
-- App code: `AudioCap/` (`ProcessTap/ProcessTap.swift` holds `ProcessTap` and `ProcessTapRecorder`; views are `RootView`, `ProcessSelectionView`, `RecordingView`).
+- App code: `AudioCap/`. `ProcessTap/` (tap, aggregate, source list), `Recording/` (engine: `ProcessTapRecorder`, `CapturePipeline`, `CaptureWriter`, `AudioExporter`, `DigitalSilenceGuard`), `AutoRecord/`, `Library/`, `Quality/`, `HiRes/`, `Accessibility/`; top-level views are `RootView`, `ProcessSelectionView`, `RecordingView`.
 - Requirements: the process-tap API needs macOS 14.4+, but the app target currently sets `MACOSX_DEPLOYMENT_TARGET = 26.0`; keep README requirements in sync with it.
 - Build settings: `AudioCap/Config/Main.xcconfig`; machine-only overrides (Team ID) in the git-ignored `AudioCap/Config/Local.xcconfig`.
 - Tests: the `AudioCapTests` target (synthetic buffers; no tap, no permission needed).
@@ -30,19 +30,19 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 |-------|--------------|--------|
 | Process tap | `CATapDescription` for the target process (`stereoMixdownOfProcesses`), `AudioHardwareCreateProcessTap` | shipped (upstream) |
 | Aggregate device | private aggregate with the tap in `kAudioAggregateDeviceTapListKey`, clocked by the output device | shipped (upstream) |
-| Format | read from the aggregate's input stream **after** it starts, validated, normalised to a canonical writer format | PR 1 |
-| IOProc | `AudioDeviceCreateIOProcIDWithBlock`; copies the buffer into a preallocated ring and returns | PR 1 |
-| Serial writer | one serial queue owns the `AVAudioFile`, writes CAF, closes it explicitly | PR 1 |
-| Export | converter loop drains until `endOfStream`; output duration checked against the capture | PR 1 |
-| Diagnostics | decoded OSStatus four-char codes, **Copy diagnostics** report | PR 1 |
-| Auto-record ("Wait for sound", the default mode) | `AutoRecord/AutoRecordMachine` (pure, idle/armed/recording/closing): a take opens on the first buffer with RMS above −60 dBFS and starts with a 0.5 s pre-roll; RMS at or below the threshold for 2 s (configurable) closes it, keeping a 0.5 s tail, then re-arms. Stop disarms. Manual mode writes from the first buffer. | PR 3 |
-| "All system audio" source | `AudioProcess.allSystemAudio` → `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object | PR 3 |
-| Source list refresh for audio-only processes | `AudioProcessListMonitor` (CoreAudio process-list + is-running-output listeners, off the main actor, coalesced) | PR 3 |
-| Library + player | `RecordingLibrary` follows `takeEvents()`, saves `library.json` in Application Support, reads each file back with `AudioFileInspector` (header, decoded and WAV/CAF payload frames, peak); `PlayerView` plays, scrubs and draws the waveform | PR 4 |
-| Level meter, output folder | `LevelMeterView` (peak, RMS, 1.5 s hold); `OutputFolder`: `~/Music/AudioCap` or a picked folder kept with a security-scoped bookmark | PR 4 |
-| Quality panel | `QualityPathBuilder` → `QualityPath` → `QualityAssessment` (badge, warnings, notes); `QualityPathContributor` is the hook for PR 6; `DeviceRateMatcher` sets the output rate only on request and restores it | PR 4 |
-| Bilingual UI (String Catalog), ≥ 16 pt, contrast ≥ 4.5:1, keyboard and VoiceOver | `Localizable.xcstrings` + `InfoPlist.xcstrings` (en/es, follows the system language); `Accessibility/AppStyle.swift` for fonts and colours | PR 5 |
-| Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | `HiResRouter` (state machine: remember output → persist restore record → switch → set rate; restore on stop, quit, next launch, device loss), `HiResRatePolicy` (Music track rate via AppleScript, else fixed 96 kHz, up to 192), `AudioMonitor` (ring buffer → `AVAudioEngine` on the real device, only this copy is resampled) | PR 6 |
+| Format | read from the aggregate's input stream **after** it starts, validated, normalised to a canonical writer format | shipped (plan PR 1) |
+| IOProc | `AudioDeviceCreateIOProcIDWithBlock`; copies the buffer into a preallocated ring and returns | shipped (plan PR 1) |
+| Serial writer | one serial queue owns the `AVAudioFile`, writes CAF, closes it explicitly | shipped (plan PR 1) |
+| Export | converter loop drains until `endOfStream`; output duration checked against the capture | shipped (plan PR 1) |
+| Diagnostics | decoded OSStatus four-char codes, **Copy diagnostics** report | shipped (plan PR 1) |
+| Auto-record ("Wait for sound", the default mode) | `AutoRecord/AutoRecordMachine` (pure, idle/armed/recording/closing): a take opens on the first buffer with RMS above −60 dBFS and starts with a 0.5 s pre-roll; RMS at or below the threshold for 2 s (configurable) closes it, keeping a 0.5 s tail, then re-arms. Stop disarms. Manual mode writes from the first buffer. | shipped (plan PR 3) |
+| "All system audio" source | `AudioProcess.allSystemAudio` → `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object | shipped (plan PR 3) |
+| Source list refresh for audio-only processes | `AudioProcessListMonitor` (CoreAudio process-list + is-running-output listeners, off the main actor, coalesced) | shipped (plan PR 3) |
+| Library + player | `RecordingLibrary` follows `takeEvents()`, saves `library.json` in Application Support, reads each file back with `AudioFileInspector` (header, decoded and WAV/CAF payload frames, peak); `PlayerView` plays, scrubs and draws the waveform | shipped (plan PR 4) |
+| Level meter, output folder | `LevelMeterView` (peak, RMS, 1.5 s hold); `OutputFolder`: `~/Music/AudioCap` or a picked folder kept with a security-scoped bookmark | shipped (plan PR 4) |
+| Quality panel | `QualityPathBuilder` → `QualityPath` → `QualityAssessment` (badge, warnings, notes); `QualityPathContributor` is how Hi-Res marks the clock and monitor (`HiResQualityContributor`, registered in `HiResController.recoverOnLaunch()`); `DeviceRateMatcher` sets the output rate only on request and restores it | shipped (plan PR 4) |
+| Bilingual UI (String Catalog), ≥ 16 pt, contrast ≥ 4.5:1, keyboard and VoiceOver | `Localizable.xcstrings` + `InfoPlist.xcstrings` (en/es, follows the system language); `Accessibility/AppStyle.swift` for fonts and colours | shipped (plan PR 5) |
+| Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | `HiResRouter` (state machine: remember output → persist restore record → switch → set rate; restore on stop, quit, next launch, device loss), `HiResRatePolicy` (Music track rate via AppleScript, else fixed 96 kHz, up to 192), `AudioMonitor` (ring buffer → `AVAudioEngine` on the real device, only this copy is resampled) | shipped (plan PR 6) |
 
 When a planned item lands, move it to "shipped" here in the same PR.
 

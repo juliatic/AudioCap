@@ -53,7 +53,7 @@ tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossles
 - The file must be closed before conversion or playback, otherwise the header disagrees with the data.
 - `stereoMixdownOfProcesses` folds surround to stereo; app volume, EQ, Sound Check and Spatial Audio happen before the tap.
 
-## Library, player and quality (PR 4)
+## Library, player and quality
 | File | Role |
 |------|------|
 | `Library/RecordingLibrary.swift` | `@MainActor` index of `LibraryEntry`; `observe(recorder)` consumes `takeEvents()`; status changes go through `LibraryEntry.Status.canTransition` (a late progress event never undoes "done"); saves `library.json` on state changes, not on every progress tick. Busy takes at launch become "failed" with a retry hint. |
@@ -63,5 +63,5 @@ tap (Float32, interleaved, aggregate rate) → CAF capture (same format, lossles
 | `Quality/QualityPanel.swift` | `QualityPathBuilder` reads `ProcessTap` diagnostics every 2 s; view and localized texts. |
 | `Quality/DeviceRateMatcher.swift` | explicit "Match output device rate"; restores the previous rate. |
 
-Extension point for Hi-Res (PR 6): implement `QualityPathContributor`, register it with `QualityPathContributors.register(_:)`, and set `path.clock?.isVirtualHiRes`, `path.monitor` or append `path.notes`. Don't special-case Hi-Res inside `QualityAssessment`.
+Extension point: a `QualityPathContributor` registered with `QualityPathContributors.register(_:)` sets `path.clock?.isVirtualHiRes`, `path.monitor` or appends `path.notes`. Hi-Res does this in `HiRes/HiResQualityContributor.swift` while routed. Don't special-case Hi-Res inside `QualityAssessment`.
 

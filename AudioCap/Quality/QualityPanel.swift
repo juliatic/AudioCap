@@ -51,7 +51,7 @@ struct QualityPanel: View {
             if assessment.isBitPerfect {
                 Label("Bit-perfect path", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green)
-                    .font(.headline)
+                    .font(AppStyle.headline)
             } else {
                 ForEach(assessment.issues, id: \.self) { issue in
                     Label(Self.text(for: issue), systemImage: "exclamationmark.triangle.fill")
@@ -77,7 +77,7 @@ struct QualityPanel: View {
             }
 
             ForEach(assessment.notes, id: \.self) { note in
-                Text(Self.text(for: note)).foregroundStyle(.secondary)
+                Text(Self.text(for: note)).secondaryTextStyle()
             }
 
             rateMatchControls(path: path)
@@ -112,10 +112,10 @@ struct QualityPanel: View {
             }
             if let change = matcher.activeChange {
                 Text("\(change.deviceName) is set to \(CaptureFormat.rateString(change.newRate)). It goes back to \(CaptureFormat.rateString(change.originalRate)) when recording stops.")
-                    .foregroundStyle(.secondary)
+                    .secondaryTextStyle()
             }
             if let error = matcher.lastError {
-                Text(error).foregroundStyle(.red)
+                Text(error).errorTextStyle()
             }
         }
     }
