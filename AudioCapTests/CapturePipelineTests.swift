@@ -36,7 +36,8 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
     }
 
     /// Feeds `frames` interleaved stereo frames per cycle, with sample values that encode the running frame index.
-    private func feed(_ pipeline: CapturePipeline, cycles: Int, sizes: [Int], start: inout Int, sampleTime: inout Double, value: ((Int, Int) -> Float)? = nil) {
+    private func feed(_ pipeline: CapturePipeline, cycles: Int, sizes: [Int], start: inout Int, sampleTime: inout Double, value: ((Int, Int) -> Float)? = nil,
+                      drainEvery: Int? = nil) {
         let maxFrames = sizes.max()!
         var interleaved = [Float](repeating: 0, count: maxFrames * 2)
         var time = AudioTimeStamp()
@@ -55,7 +56,11 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
             }
             start += frames
             sampleTime += Double(frames)
-            if cycle % 64 == 0 { usleep(200) } // let the drain timer interleave with the producer
+            if let drainEvery {
+                if cycle % drainEvery == drainEvery - 1 { pipeline.drainNow() }
+            } else if cycle % 64 == 0 {
+                usleep(200) // let the drain timer interleave with the producer
+            }
         }
     }
 
@@ -64,8 +69,11 @@ final class CapturePipelineTests: TemporaryDirectoryTestCase {
         let pipeline = makePipeline(collector)
         var next = 0
         var sampleTime = 0.0
-        // 6,000 cycles of varying sizes (about 54 s of audio at 48 kHz).
-        feed(pipeline, cycles: 6_000, sizes: [512, 471, 1_024, 333, 480, 512], start: &next, sampleTime: &sampleTime)
+        // 6,000 cycles of varying sizes (about 54 s of audio at 48 kHz). Draining synchronously every 64 cycles (at most
+        // 65,536 frames, a third of the 4 s ring) keeps the test independent of how busy the machine is; the drain
+        // timer still runs in between.
+        feed(pipeline, cycles: 6_000, sizes: [512, 471, 1_024, 333, 480, 512], start: &next, sampleTime: &sampleTime,
+             drainEvery: 64)
         pipeline.finish()
 
         let takes = collector.closed

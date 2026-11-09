@@ -321,6 +321,11 @@ final class CapturePipeline: @unchecked Sendable {
         }
     }
 
+    /// Drains the ring now instead of waiting for the timer, so a test producer can't outrun a busy writer queue.
+    func drainNow() {
+        queue.sync { drain() }
+    }
+
     /// Writes everything published so far. Runs on the writer queue.
     private func drain() {
         dispatchPrecondition(condition: .onQueue(queue))
