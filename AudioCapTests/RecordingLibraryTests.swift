@@ -82,6 +82,25 @@ final class RecordingLibraryTests: TemporaryDirectoryTestCase {
         XCTAssertFalse(S.canTransition(from: .converting(progress: 0.5), to: .recording))
     }
 
+    func testReconnectNoteFromTheRecorderIsKeptOnTheEntry() throws {
+        let library = RecordingLibrary(indexURL: indexURL)
+        var recorded = try take()
+        library.apply(.added(recorded))
+        XCTAssertNil(library.entries.first?.warning)
+
+        let note = "The capture was reconnected 2 time(s) (output device change, wake or silence recovery); audio played during a reconnect is not in the take."
+        recorded.warning = note
+        recorded.status = .exporting(progress: 0)
+        library.apply(.updated(recorded))
+        recorded.status = .completed
+        library.apply(.updated(recorded))
+
+        let entry = try XCTUnwrap(RecordingLibrary(indexURL: indexURL).entries.first)
+        XCTAssertEqual(entry.status, .done)
+        XCTAssertEqual(entry.warning, note)
+        XCTAssertFalse(entry.warning?.contains("timeline jumped") == true)
+    }
+
     func testRecorderEventsDriveStatusAndLateProgressIsIgnored() async throws {
         let library = RecordingLibrary(indexURL: indexURL)
         var recorded = try take()
