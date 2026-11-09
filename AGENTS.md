@@ -37,6 +37,7 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 | Auto-record ("Wait for sound", the default mode) | `AutoRecord/AutoRecordMachine` (pure, idle/armed/recording/closing): a take opens on the first buffer with RMS above −60 dBFS and starts with a 0.5 s pre-roll; RMS at or below the threshold for 2 s (configurable) closes it, keeping a 0.5 s tail, then re-arms. Stop disarms. Manual mode writes from the first buffer. | PR 3 |
 | "All system audio" source | `AudioProcess.allSystemAudio` → `CATapDescription(stereoGlobalTapButExcludeProcesses:)` with AudioCap's own process object | PR 3 |
 | Source list refresh for audio-only processes | `AudioProcessListMonitor` (CoreAudio process-list + is-running-output listeners, off the main actor, coalesced) | PR 3 |
+| Picker follows a relaunched source | `SourceSelection` ("<name> (waiting)" row while gone; re-selects by bundle ID or executable path, as `ProcessTap.isRelaunch`) | PR 3 |
 | Library + player, level meter, output folder `~/Music/AudioCap`, Quality panel | | planned (PR 4) |
 | Bilingual UI (String Catalog), ≥ 16 pt | | planned (PR 5) |
 | Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | | planned (PR 6) |
