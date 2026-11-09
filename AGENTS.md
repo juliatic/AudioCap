@@ -54,8 +54,9 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 
 | Task | Command |
 |------|---------|
-| Build Release and open the app (the one launcher) | `./start.sh` |
-| Build only | `./start.sh --no-open` |
+| Build Release, install as `/Applications/AudioCap.app` (quits and replaces a running copy) and open it (the one launcher) | `./start.sh` |
+| Build and install, do not open | `./start.sh --no-open` |
+| Build into `./build` only, leave `/Applications` alone | `./start.sh --no-install` |
 | Unit tests | `./start.sh --test` |
 | Help | `./start.sh --help` |
 | Raw build | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -configuration Release -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build` |
@@ -87,7 +88,8 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 - **Close the file before converting.** Converting (or letting a player read) a file that the writer has not closed yields a header that disagrees with the data, so players run past the displayed length.
 - **A tap records at the rate the source app renders at, which is set by its output device.** A 96 kHz track played to a 48 kHz device (Bluetooth, most displays) is resampled before the tap sees it. Only Hi-Res mode (PR 6), which routes the system output to the `AudioCap Hi-Res` virtual device, avoids that.
 - The tap sees audio **after** the app's volume, EQ, Sound Check and Spatial Audio, and `stereoMixdownOfProcesses` folds surround to stereo.
-- Changing the bundle id or ad-hoc re-signing can make macOS ask for the audio-capture permission again. Reset it with `tccutil reset AudioCapture <bundle id>`.
+- `./start.sh` installs into `/Applications/AudioCap.app`: it quits a running AudioCap (Apple Event `quit`, 10 s, then `pkill -x AudioCap`), replaces the old copy only after a successful build, and asks once for sudo (or stops with a clear message) when `/Applications` is not writable.
+- Changing the bundle id or ad-hoc re-signing can make macOS ask for the audio-capture permission again the first time the rebuilt app runs from `/Applications`. Reset it with `tccutil reset AudioCapture <bundle id>`.
 - The upstream sandboxed build saves to `~/Library/Containers/codes.rambo.samplecode.AudioCap/Data/Library/Application Support/AudioCap`; the plan moves output to `~/Music/AudioCap` (PR 4).
 
 ## Skills

@@ -38,7 +38,7 @@ Si pulsaste **No permitir** o el aviso no aparece:
    ```
    Cuando se aplique el cambio de identificador previsto en el plan, será `io.github.juliatic.AudioCap`.
 
-Las compilaciones con firma ad hoc (lo que hace `./start.sh` si no hay Team ID) cambian de firma cada vez que recompilas, así que macOS puede volver a pedir el permiso. Si pones tu Team ID en `AudioCap/Config/Local.xcconfig` (`DEVELOPMENT_TEAM = XXXXXXXXXX`), el permiso se mantiene entre compilaciones.
+Las compilaciones con firma ad hoc (lo que hace `./start.sh` si no hay Team ID) cambian de firma cada vez que recompilas, así que macOS puede volver a pedir el permiso la primera vez que se abre la copia recompilada. `./start.sh` instala cada compilación como `/Applications/AudioCap.app`, así que cuenta con que el aviso vuelva tras recompilar, y una vez más cuando cambie el identificador de la app (bundle ID) con el nuevo motor. Si pones tu Team ID en `AudioCap/Config/Local.xcconfig` (`DEVELOPMENT_TEAM = XXXXXXXXXX`), el permiso se mantiene entre compilaciones.
 
 ## Dónde se guardan las grabaciones
 

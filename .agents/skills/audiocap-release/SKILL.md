@@ -14,7 +14,7 @@ Nothing here has a CI job (plan decision 8); releases are cut by hand on a Mac.
 ## Signing modes
 | Mode | How | Good for | Caveats |
 |------|-----|----------|---------|
-| Ad-hoc | default `./start.sh` (`CODE_SIGN_IDENTITY=-`, no team) | your own Mac | Gatekeeper blocks it on other Macs (quarantine); each rebuild has a new code hash, so macOS may ask for the audio-capture permission again |
+| Ad-hoc | default `./start.sh` (`CODE_SIGN_IDENTITY=-`, no team), installed as `/Applications/AudioCap.app` | your own Mac | Gatekeeper blocks it on other Macs (quarantine); each rebuild has a new code hash, so macOS may ask for the audio-capture permission again |
 | Development | `DEVELOPMENT_TEAM = <Team ID>` in git-ignored `AudioCap/Config/Local.xcconfig`; `./start.sh` picks it up | stable permission across rebuilds on your Macs | not distributable |
 | Developer ID | Developer ID Application certificate + hardened runtime + notarisation | sharing with other people | needs a paid Apple Developer account |
 

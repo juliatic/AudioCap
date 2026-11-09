@@ -1,5 +1,6 @@
 #!/bin/bash
-# AudioCap launcher: build, test and open the app with one command.
+# AudioCap launcher: build, install into /Applications and open the app with
+# one command.
 # macOS only (process taps are a macOS CoreAudio API). Compatible with the
 # bash 3.2 that ships with macOS: no associative arrays, no `wait -n`,
 # no `${var,,}`, BSD userland only.
@@ -13,6 +14,10 @@ CONFIGURATION="Release"
 BUILD_DIR="$ROOT_DIR/build"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
 APP_PATH="$BUILD_DIR/AudioCap.app"
+INSTALL_DIR="${AUDIOCAP_INSTALL_DIR:-/Applications}"
+INSTALLED_APP="$INSTALL_DIR/AudioCap.app"
+QUIT_TIMEOUT=10
+SUDO_TIMEOUT=120
 LOCAL_XCCONFIG="$ROOT_DIR/AudioCap/Config/Local.xcconfig"
 MIN_MACOS="14.4"
 MIN_XCODE_MAJOR=16
@@ -24,8 +29,12 @@ usage() {
     cat <<'USAGE'
 Usage: ./start.sh [option]
 
-  (no option)          Build AudioCap (Release) into ./build and open it.
-  --no-open            Build into ./build but do not open the app.
+  (no option)          Build AudioCap (Release), install it as
+                       /Applications/AudioCap.app (quitting and replacing
+                       the running copy) and open it from there.
+  --no-open            Build and install into /Applications, do not open.
+  --no-install         Build into ./build/AudioCap.app only: /Applications
+                       is not touched and nothing is opened.
   --test               Run the unit tests (scheme AudioCap, target AudioCapTests).
   --install-driver     Install the AudioCap Hi-Res virtual device (not available yet).
   --uninstall-driver   Remove the AudioCap Hi-Res virtual device (not available yet).
@@ -36,8 +45,17 @@ git-ignored file AudioCap/Config/Local.xcconfig sets your team, e.g.:
 
     DEVELOPMENT_TEAM = ABCDE12345
 
+If /Applications is not writable by your user, the install asks once for
+an administrator password (sudo). The old copy is only removed after a
+successful build.
+
+macOS may ask for the audio-capture permission again the first time a
+rebuilt or re-signed app runs (always with ad-hoc signing, and once after a
+bundle-id change).
+
 Environment: AUDIOCAP_BUILD_TIMEOUT and AUDIOCAP_TEST_TIMEOUT (seconds,
 default 900) bound xcodebuild so the script can never hang.
+AUDIOCAP_INSTALL_DIR overrides /Applications.
 USAGE
 }
 
@@ -166,36 +184,102 @@ build_app() {
     local product="$DERIVED_DATA/Build/Products/$CONFIGURATION/AudioCap.app"
     [ -d "$product" ] || die "The build finished but $product is missing. Full log: build/build.log"
 
-    quit_running_copy
     rm -rf "$APP_PATH"
     ditto "$product" "$APP_PATH"
     say "Built $APP_PATH"
 }
 
+bundle_id_of() {
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist" 2>/dev/null || true
+}
+
+is_running() {
+    pgrep -x AudioCap >/dev/null 2>&1
+}
+
 # A running copy keeps the old binary on screen and `open` would only bring
-# it to the front, so stop the copy that lives in ./build before replacing it.
-quit_running_copy() {
-    local pids
-    pids="$(pgrep -f "$APP_PATH/Contents/MacOS/" 2>/dev/null || true)"
-    if [ -n "$pids" ]; then
-        say "Closing the AudioCap that is already running from ./build"
-        kill -TERM $pids 2>/dev/null || true
-        local i=0
-        while [ "$i" -lt 20 ] && pgrep -f "$APP_PATH/Contents/MacOS/" >/dev/null 2>&1; do
+# it to the front, so quit every running AudioCap before replacing it:
+# politely through Apple Events first, then SIGTERM, then SIGKILL.
+quit_running_copies() {
+    is_running || return 0
+    say "Quitting the AudioCap that is running (up to ${QUIT_TIMEOUT}s)"
+    local ids="" id
+    ids="$(bundle_id_of "$APP_PATH") $(bundle_id_of "$INSTALLED_APP")"
+    for id in $ids; do
+        with_timeout "$QUIT_TIMEOUT" osascript -e "tell application id \"$id\" to quit" >/dev/null 2>&1 || true
+    done
+    local i=0
+    while [ "$i" -lt $((QUIT_TIMEOUT * 4)) ] && is_running; do
+        sleep 0.25
+        i=$((i + 1))
+    done
+    if is_running; then
+        warn "AudioCap did not quit within ${QUIT_TIMEOUT}s; stopping it"
+        pkill -x AudioCap 2>/dev/null || true
+        i=0
+        while [ "$i" -lt 12 ] && is_running; do
             sleep 0.25
             i=$((i + 1))
         done
+        if is_running; then
+            pkill -9 -x AudioCap 2>/dev/null || true
+            sleep 0.5
+        fi
+    fi
+    is_running && die "AudioCap is still running and could not be stopped. Quit it by hand and run ./start.sh again."
+    return 0
+}
+
+# Sets SUDO to "" or "sudo". Dies with a clear message when admin rights are
+# needed but cannot be obtained, so the old copy is never left silently.
+SUDO=""
+choose_install_privileges() {
+    if [ -w "$INSTALL_DIR" ] && { [ ! -e "$INSTALLED_APP" ] || [ -O "$INSTALLED_APP" ]; }; then
+        SUDO=""
+        return 0
+    fi
+    say "$INSTALL_DIR is not writable by $(id -un): administrator rights are needed to install"
+    if sudo -n true 2>/dev/null; then
+        SUDO="sudo"
+    elif [ -t 0 ]; then
+        say "Enter your administrator password (asked once)"
+        if with_timeout "$SUDO_TIMEOUT" sudo -v; then
+            SUDO="sudo"
+        else
+            die "No administrator rights, so $INSTALLED_APP was not replaced. The new build is in build/AudioCap.app (or run ./start.sh --no-install)."
+        fi
+    else
+        die "Installing into $INSTALL_DIR needs administrator rights and there is no terminal to ask for a password, so $INSTALLED_APP was not replaced. Run ./start.sh from Terminal, or use ./start.sh --no-install."
     fi
 }
 
+install_app() {
+    [ -d "$APP_PATH" ] || die "Nothing to install: $APP_PATH is missing."
+    [ -d "$INSTALL_DIR" ] || die "$INSTALL_DIR does not exist."
+    choose_install_privileges
+    quit_running_copies
+    local staging="$INSTALL_DIR/.AudioCap.app.installing"
+    say "Installing into $INSTALLED_APP"
+    $SUDO rm -rf "$staging"
+    with_timeout 300 $SUDO ditto "$APP_PATH" "$staging" || {
+        $SUDO rm -rf "$staging"
+        die "Copying the app into $INSTALL_DIR failed; the previous copy was left in place."
+    }
+    $SUDO rm -rf "$INSTALLED_APP"
+    $SUDO mv "$staging" "$INSTALLED_APP"
+    say "Installed $INSTALLED_APP ($(bundle_id_of "$INSTALLED_APP"))"
+}
+
 open_app() {
-    say "Opening AudioCap"
-    open "$APP_PATH"
+    say "Opening $INSTALLED_APP"
+    with_timeout 30 open "$INSTALLED_APP"
     cat <<'NEXT'
 
-AudioCap is open. The first time, click "Allow" and accept the system prompt
-so it can record other apps (System Settings > Privacy & Security >
-Screen & System Audio Recording). Problems? See docs/troubleshooting.md.
+AudioCap is open. The first time (and again after a rebuild with ad-hoc
+signing, or after a bundle-id change) macOS may ask for the audio-capture
+permission: click "Allow" and accept the system prompt (System Settings >
+Privacy & Security > Screen & System Audio Recording).
+Problems? See docs/troubleshooting.md.
 NEXT
 }
 
@@ -246,7 +330,8 @@ main() {
     fi
     case "${1:-}" in
         "") mode="run" ;;
-        --no-open) mode="build" ;;
+        --no-open) mode="install" ;;
+        --no-install) mode="build" ;;
         --test) mode="test" ;;
         --install-driver) mode="install-driver" ;;
         --uninstall-driver) mode="uninstall-driver" ;;
@@ -262,7 +347,8 @@ main() {
         uninstall-driver) uninstall_driver ;;
         test) check_xcode; run_tests ;;
         build) check_xcode; build_app ;;
-        run) check_xcode; build_app; open_app ;;
+        install) check_xcode; build_app; install_app ;;
+        run) check_xcode; build_app; install_app; open_app ;;
     esac
 }
 

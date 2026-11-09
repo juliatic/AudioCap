@@ -11,8 +11,12 @@ Every command below has an explicit timeout. On macOS, `timeout` comes from GNU 
 | Check | Command | Pass |
 |-------|---------|------|
 | Launcher help | `timeout 30 ./start.sh --help` | usage text, exit 0 |
-| Build + open | `timeout 1200 ./start.sh` | `build/AudioCap.app` exists and the window appears |
-| Build only | `timeout 1200 ./start.sh --no-open` | exit 0 |
+| Build + install + open | `timeout 1200 ./start.sh` | exit 0; `/Applications/AudioCap.app` is new and the running process is `/Applications/AudioCap.app/Contents/MacOS/AudioCap` |
+| Replace a running copy | run `timeout 1200 ./start.sh` again while the app is open | exit 0; "Quitting the AudioCap that is running"; new PID and new binary inode |
+| Build + install, no launch | `timeout 1200 ./start.sh --no-open` | exit 0 |
+| Build only | `timeout 1200 ./start.sh --no-install` | exit 0; `build/AudioCap.app` exists, `/Applications` unchanged |
+| Failed build leaves `/Applications` alone | `AUDIOCAP_BUILD_TIMEOUT=3 timeout 60 ./start.sh` after moving `build/DerivedData` aside | non-zero exit, installed binary inode unchanged |
+| Non-writable install dir | `AUDIOCAP_INSTALL_DIR=<root-owned dir> timeout 1200 ./start.sh --no-open </dev/null` | uses sudo if it needs no password, otherwise a clear error and the old copy is kept |
 | Unit tests | `timeout 1200 ./start.sh --test` | exit 0; exit 3 means the checkout has no `AudioCapTests` target |
 | Raw tests | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= test` | `** TEST SUCCEEDED **` |
 | One test | add `-only-testing:AudioCapTests/<Class>/<method>` | |
@@ -25,6 +29,7 @@ Unit tests use synthetic buffers (writer, converter, durations, FLAC bit-exact r
 ## Driving the app on a headless build machine
 - A VM without an audio output device makes the tap fail with `'!obj'` (`560947818`). A virtual output (for example BlackHole on a throwaway VM) gives the system a device; do not change audio devices on a machine other projects use.
 - Play a known file with `timeout 30 afplay <file> &` and pick `afplay` in the process list.
+- Each ad-hoc rebuild installed into `/Applications` (and the bundle-id change) can bring the audio-capture permission prompt back on first launch.
 - Show the permission prompt again: `tccutil reset AudioCapture <bundle id>` (`codes.rambo.samplecode.AudioCap` upstream, `io.github.juliatic.AudioCap` after the bundle-id change). Starting a recording may also trigger the microphone prompt.
 - App logs: `timeout 30 log show --last 5m --style compact --predicate 'process == "AudioCap"'`.
 - Check the result file with the duration check in `audiocap-audio-quality`; a 4,096-byte WAV with `duration=N/A` is an empty file (header only).

@@ -42,16 +42,17 @@ cd AudioCap
 ./start.sh
 ```
 
-`./start.sh` comprueba que Xcode está instalado, compila una versión Release en `./build/AudioCap.app` y la abre. Otras opciones:
+`./start.sh` comprueba que Xcode está instalado, compila una versión Release, la instala como `/Applications/AudioCap.app` y la abre desde ahí. Si AudioCap ya está abierta, primero la cierra y sustituye la copia antigua de `/Applications`; si la compilación falla, no toca nada en `/Applications`. Si tu usuario no puede escribir en `/Applications`, el script pide una sola vez la contraseña de administrador o se detiene con un mensaje claro. Otras opciones:
 
 | Orden | Qué hace |
 |-------|----------|
-| `./start.sh` | compila y abre la app |
-| `./start.sh --no-open` | solo compila |
+| `./start.sh` | compila, instala en `/Applications` y abre la app |
+| `./start.sh --no-open` | compila e instala en `/Applications`, sin abrirla |
+| `./start.sh --no-install` | solo compila en `./build/AudioCap.app` (no toca `/Applications`) |
 | `./start.sh --test` | ejecuta las pruebas unitarias (objetivo `AudioCapTests`, que llega con el nuevo motor) |
 | `./start.sh --help` | muestra todas las opciones |
 
-Sin Team ID la app se firma ad hoc, así que macOS puede volver a pedir el permiso cada vez que recompilas. Para evitarlo, crea `AudioCap/Config/Local.xcconfig` (Git lo ignora) con tu Team ID de Apple:
+Sin Team ID la app se firma ad hoc, así que macOS puede volver a pedir el permiso de grabación de audio la primera vez que abres cada copia recompilada o firmada de nuevo. También lo pedirá una vez cuando cambie el identificador de la app (bundle ID) con el nuevo motor. Para evitarlo, crea `AudioCap/Config/Local.xcconfig` (Git lo ignora) con tu Team ID de Apple:
 
 ```
 DEVELOPMENT_TEAM = XXXXXXXXXX

@@ -38,7 +38,7 @@ If you clicked **Don't Allow**, or the prompt never appears:
    ```
    After the bundle-id change in the plan, the id is `io.github.juliatic.AudioCap`.
 
-Ad-hoc builds (the default `./start.sh` build without a Team ID) get a new signature on every rebuild, so macOS can ask again after you rebuild. Putting your Team ID in `AudioCap/Config/Local.xcconfig` (`DEVELOPMENT_TEAM = XXXXXXXXXX`) keeps the permission across rebuilds.
+Ad-hoc builds (the default `./start.sh` build without a Team ID) get a new signature on every rebuild, so macOS can ask again the first time the rebuilt copy runs. `./start.sh` installs every build as `/Applications/AudioCap.app`, so expect the prompt after a rebuild, and once more when the bundle ID changes with the new engine. Putting your Team ID in `AudioCap/Config/Local.xcconfig` (`DEVELOPMENT_TEAM = XXXXXXXXXX`) keeps the permission across rebuilds.
 
 ## Where recordings are saved
 

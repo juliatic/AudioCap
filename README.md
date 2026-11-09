@@ -42,16 +42,17 @@ cd AudioCap
 ./start.sh
 ```
 
-`./start.sh` checks for Xcode, builds a Release copy into `./build/AudioCap.app` and opens it. Other options:
+`./start.sh` checks for Xcode, builds a Release copy, installs it as `/Applications/AudioCap.app` and opens it from there. If AudioCap is already running, it is quit first and the old copy in `/Applications` is replaced; nothing in `/Applications` is touched when the build fails. If your user cannot write to `/Applications`, the script asks once for an administrator password, or stops with a clear message. Other options:
 
 | Command | What it does |
 |---------|--------------|
-| `./start.sh` | build and open the app |
-| `./start.sh --no-open` | build only |
+| `./start.sh` | build, install into `/Applications` and open the app |
+| `./start.sh --no-open` | build and install into `/Applications`, do not open |
+| `./start.sh --no-install` | build into `./build/AudioCap.app` only (`/Applications` is left alone) |
 | `./start.sh --test` | run the unit tests (target `AudioCapTests`, added with the new engine) |
 | `./start.sh --help` | show all options |
 
-Without a Team ID the app is signed ad hoc, so macOS may ask for the permission again after each rebuild. To keep it, create `AudioCap/Config/Local.xcconfig` (git-ignored) with your Apple Team ID:
+Without a Team ID the app is signed ad hoc, so macOS may ask for the audio-capture permission again the first time each rebuilt or re-signed copy runs. The same happens once when the bundle ID changes with the new engine. To keep it, create `AudioCap/Config/Local.xcconfig` (git-ignored) with your Apple Team ID:
 
 ```
 DEVELOPMENT_TEAM = XXXXXXXXXX
