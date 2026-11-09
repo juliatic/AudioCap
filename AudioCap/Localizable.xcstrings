@@ -1212,6 +1212,16 @@
         }
       }
     },
+    "Most of this take after its first sound is digital zero (%@ s of %@ s) while %@ was playing. Unless that passage was really silent, CoreAudio delivered zeros instead of its audio and that audio is missing from the take." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La mayor parte de esta toma tras su primer sonido son ceros digitales (%1$@ s de %2$@ s) mientras %3$@ sonaba. Salvo que ese pasaje fuera realmente silencioso, CoreAudio entregó ceros en lugar de su audio y ese audio falta en la toma."
+          }
+        }
+      }
+    },
     "Move to Trash" : {
       "extractionState" : "manual",
       "localizations" : {

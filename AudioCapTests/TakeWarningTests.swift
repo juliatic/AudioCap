@@ -70,6 +70,14 @@ final class TakeWarningTests: XCTestCase {
             .hasPrefix("Puede que la toma empiece hasta \(shown) s tarde"))
     }
 
+    func testMostlyZeroRendering() throws {
+        let (zeros, span) = (2.7.formatted(.number.precision(.fractionLength(3))), 2.71.formatted(.number.precision(.fractionLength(3))))
+        XCTAssertEqual(TakeWarning.mostlyZero(zeroSeconds: 2.7, spanSeconds: 2.71).text(source: .app(name: "afplay")),
+                       "Most of this take after its first sound is digital zero (\(zeros) s of \(span) s) while afplay was playing. Unless that passage was really silent, CoreAudio delivered zeros instead of its audio and that audio is missing from the take.")
+        XCTAssertEqual(TakeWarning.mostlyZero(zeroSeconds: 2.7, spanSeconds: 2.71).text(source: .app(name: "afplay"), bundle: try spanish),
+                       "La mayor parte de esta toma tras su primer sonido son ceros digitales (\(zeros) s de \(span) s) mientras afplay sonaba. Salvo que ese pasaje fuera realmente silencioso, CoreAudio entregó ceros en lugar de su audio y ese audio falta en la toma.")
+    }
+
     func testLegacyLibraryEntryMigratesAndIsRewrittenAsCodes() throws {
         let asbd = AudioStreamBasicDescription(mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
                                                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,

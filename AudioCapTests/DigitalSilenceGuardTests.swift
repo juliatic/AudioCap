@@ -67,4 +67,12 @@ final class DigitalSilenceGuardTests: XCTestCase {
         XCTAssertFalse(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 60, sourceIsPlaying: true, secondsSinceLastRefresh: 5))
         XCTAssertTrue(IdleTapRefresh.shouldRefresh(isTakeOpen: false, silentSeconds: 60, sourceIsPlaying: true, secondsSinceLastRefresh: 10))
     }
+    func testChoppedTapIsRebuiltOnlyInAnOpenTakeWhileTheSourcePlays() {
+        XCTAssertTrue(ChoppedCapture.shouldRebuild(isTakeOpen: true, cuts: 3, sourceIsPlaying: true, secondsSinceLastRebuild: nil))
+        XCTAssertFalse(ChoppedCapture.shouldRebuild(isTakeOpen: true, cuts: 2, sourceIsPlaying: true, secondsSinceLastRebuild: nil))
+        XCTAssertFalse(ChoppedCapture.shouldRebuild(isTakeOpen: false, cuts: 9, sourceIsPlaying: true, secondsSinceLastRebuild: nil))
+        XCTAssertFalse(ChoppedCapture.shouldRebuild(isTakeOpen: true, cuts: 9, sourceIsPlaying: false, secondsSinceLastRebuild: nil))
+        XCTAssertFalse(ChoppedCapture.shouldRebuild(isTakeOpen: true, cuts: 9, sourceIsPlaying: true, secondsSinceLastRebuild: 9))
+        XCTAssertTrue(ChoppedCapture.shouldRebuild(isTakeOpen: true, cuts: 9, sourceIsPlaying: true, secondsSinceLastRebuild: 10))
+    }
 }

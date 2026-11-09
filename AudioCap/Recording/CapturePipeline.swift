@@ -75,6 +75,9 @@ final class CapturePipeline: @unchecked Sendable {
     /// to exact zeros and back; the tap does when it delivers zeros mid-signal (see docs), and no sample time jumps.
     let dropouts = Atomic<Int>(0)
     let dropoutFrames = Atomic<Int>(0)
+    /// Cuts from signal to an all-zero cycle while the source plays, since the last `cleanSignalSeconds` of
+    /// uninterrupted signal. A tap that chops a playing source into short bursts makes many (see `ChoppedCapture`).
+    let chops = Atomic<Int>(0)
     let timeline = CaptureTimelineLog()
     /// `true` while a take file is open (writer queue writes, any thread reads).
     let isTakeOpen = Atomic<Bool>(false)
@@ -83,6 +86,7 @@ final class CapturePipeline: @unchecked Sendable {
     /// A cycle edge at or above this magnitude (-40 dBFS) counts as an abrupt cut or return.
     static let dropoutEdge: Float = 0.01
     static let maxDropoutSeconds = 1.0
+    static let cleanSignalSeconds = 0.5
     /// A take whose first signal arrives this soon after an idle tap refresh may have lost its onset to the refresh.
     static let lateStartSeconds = 0.5
     static let hostTicksPerSecond: Double = {
@@ -106,6 +110,8 @@ final class CapturePipeline: @unchecked Sendable {
     private var nextSampleTime: Float64 = -1
     /// Largest magnitude of the last frame of the previous cycle; 0 after an all-zero cycle.
     private var lastEdge: Float = 0
+    private var previousCyclePeak: Float = 0
+    private var cleanSignalFrames = 0
     /// Frames of the all-zero run that started with an abrupt cut, not yet counted as a dropout.
     private var pendingDropoutFrames = 0
     private var pendingDropoutPosition = 0
@@ -127,10 +133,9 @@ final class CapturePipeline: @unchecked Sendable {
     private var takeOverflow = 0
     private var takeJumps = 0
     private var takeSkippedFrames = 0
-    private var takeDropouts = 0
-    private var takeDropoutFrames = 0
     /// Uncaptured frames of the refresh the take's onset followed, if any.
     private var takeLateStartFrames: Int?
+    private var takeZeros = ZeroSpanMeter()
     private var pendingLateStart: CaptureTimelineLog.Entry?
     private let scratch: AVAudioPCMBuffer
     private var isFinished = false
@@ -263,7 +268,13 @@ final class CapturePipeline: @unchecked Sendable {
                 pendingDropoutPosition = ring.producedFrames
             }
             lastEdge = 0
+            if previousCyclePeak >= Self.dropoutEdge, sourceIsOutputting.load(ordering: .relaxed) {
+                chops.add(1, ordering: .relaxed)
+            }
+            cleanSignalFrames = 0
         } else {
+            cleanSignalFrames += layout.frames
+            if Double(cleanSignalFrames) >= Self.cleanSignalSeconds * format.sampleRate { chops.store(0, ordering: .relaxed) }
             digitalSilenceRun.store(0, ordering: .relaxed)
             signalSeen.store(true, ordering: .relaxed)
             if pendingDropoutFrames > 0, pendingDropoutFrames <= maxDropoutFrames, firstEdge >= Self.dropoutEdge {
@@ -278,6 +289,7 @@ final class CapturePipeline: @unchecked Sendable {
                 framesSinceRefresh = .max
             }
         }
+        previousCyclePeak = peak
         if framesSinceRefresh != .max {
             framesSinceRefresh = framesSinceRefresh + layout.frames > lateStartFrames ? .max : framesSinceRefresh + layout.frames
         }
@@ -299,6 +311,9 @@ final class CapturePipeline: @unchecked Sendable {
         lastEdge = 0
         pendingDropoutFrames = 0
         framesSinceRefresh = .max
+        previousCyclePeak = 0
+        cleanSignalFrames = 0
+        chops.store(0, ordering: .relaxed)
         if chargesTake {
             reconnects.add(1, ordering: .relaxed)
         } else {
@@ -375,8 +390,7 @@ final class CapturePipeline: @unchecked Sendable {
                 takeJumps += 1
                 takeSkippedFrames += entry.frames
             case .dropout:
-                takeDropouts += 1
-                takeDropoutFrames += entry.frames
+                break // the take's writer finds these with `takeZeros`, along with holes inside a cycle
             case .lateStart:
                 takeLateStartFrames = max(takeLateStartFrames ?? 0, entry.frames)
             }
@@ -390,6 +404,7 @@ final class CapturePipeline: @unchecked Sendable {
             vDSP_maxmgv(data[c], 1, &channelPeak, vDSP_Length(buffer.frameLength))
             takePeak = max(takePeak, channelPeak)
         }
+        takeZeros.add(data, channels: channelCount, frames: Int(buffer.frameLength), sourceIsPlaying: sourceIsOutputting.load(ordering: .relaxed))
         writer.write(buffer)
         currentTakeFrames.store(Int(writer.framesWritten), ordering: .relaxed)
     }
@@ -445,8 +460,9 @@ final class CapturePipeline: @unchecked Sendable {
         self.take = take
         takePeak = 0
         isTakeOpen.store(true, ordering: .relaxed)
-        (takeJumps, takeSkippedFrames, takeDropouts, takeDropoutFrames) = (0, 0, 0, 0)
+        (takeJumps, takeSkippedFrames) = (0, 0)
         takeLateStartFrames = nil
+        takeZeros = ZeroSpanMeter(maxHoleFrames: maxDropoutFrames)
         if let pending = pendingLateStart, ring.consumedFrames - pending.position <= lateStartFrames + Int(scratch.frameCapacity) {
             takeLateStartFrames = pending.frames
         }
@@ -484,12 +500,16 @@ final class CapturePipeline: @unchecked Sendable {
         let reconnected = reconnects.exchange(0, ordering: .relaxed)
         if reconnected > 0 { warnings.append(.reconnected(count: reconnected)) }
         if takeJumps > 0 { warnings.append(.timelineJumps(count: takeJumps, skippedFrames: takeSkippedFrames)) }
-        if takeDropouts > 0 {
-            warnings.append(.dropouts(count: takeDropouts, frames: takeDropoutFrames,
-                                      seconds: Double(takeDropoutFrames) / format.sampleRate))
+        if takeZeros.holes > 0 {
+            warnings.append(.dropouts(count: takeZeros.holes, frames: takeZeros.holeFrames,
+                                      seconds: Double(takeZeros.holeFrames) / format.sampleRate))
         }
         if let lateFrames = takeLateStartFrames {
             warnings.append(.startMayBeLate(seconds: Double(lateFrames) / format.sampleRate))
+        }
+        if takeZeros.isMostlyZero(sampleRate: format.sampleRate) {
+            warnings.append(.mostlyZero(zeroSeconds: Double(takeZeros.zeroFrames) / format.sampleRate,
+                                        spanSeconds: Double(takeZeros.spanFrames) / format.sampleRate))
         }
         take.warnings = warnings
         take.status = .exporting(progress: 0)
@@ -500,6 +520,73 @@ final class CapturePipeline: @unchecked Sendable {
 /// Timeline jumps and dropouts found on the I/O thread, tagged with the ring position where they happened, so the
 /// writer queue charges each one to the take that contains that position (or to none, while no take is open).
 /// Single producer (I/O thread), single consumer (writer queue); no allocation or locks after init.
+/// Digital zero in a take after its first sound, while the source reports running output. A tap can deliver a
+/// sliver of signal and then zeros while the source keeps playing (see docs); the dropout check misses that when
+/// the zeros last longer than `maxDropoutSeconds` or the take ends before signal returns.
+struct ZeroSpanMeter {
+    /// Exact-zero runs at least this long count; isolated zero samples are ordinary audio.
+    static let minRunFrames = 64
+    static let minZeroSeconds = 1.0
+    /// Zeros this long between two loud samples are a hole cut into the audio: real audio cannot jump from a loud
+    /// sample to exact zero on every channel and back (engine harness, 48 kHz: 23-frame holes in every 512-frame cycle).
+    static let minHoleFrames = 8
+    /// Frames after the first non-zero frame while the source was playing.
+    private(set) var spanFrames = 0
+    /// Of those, frames in zero runs of at least `minRunFrames`, including a trailing run.
+    var zeroFrames: Int { closedZeroFrames + (run >= Self.minRunFrames ? run : 0) }
+    /// Zero runs of `minHoleFrames` up to `maxHoleFrames` between loud samples (`CapturePipeline.dropoutEdge`).
+    private(set) var holes = 0
+    private(set) var holeFrames = 0
+    let maxHoleFrames: Int
+    private var closedZeroFrames = 0
+    private var run = 0
+    private var runStartMagnitude: Float = 0
+    private var lastMagnitude: Float = 0
+    private var signalSeen = false
+
+    init(maxHoleFrames: Int = .max) {
+        self.maxHoleFrames = maxHoleFrames
+    }
+
+    mutating func add(_ data: UnsafePointer<UnsafeMutablePointer<Float>>, channels: Int, frames: Int, sourceIsPlaying: Bool) {
+        guard sourceIsPlaying else {
+            endRun()
+            lastMagnitude = 0
+            return
+        }
+        for f in 0..<frames {
+            var magnitude: Float = 0
+            for c in 0..<channels { magnitude = max(magnitude, abs(data[c][f])) }
+            if magnitude == 0 {
+                guard signalSeen else { continue }
+                if run == 0 { runStartMagnitude = lastMagnitude }
+                run += 1
+                spanFrames += 1
+            } else {
+                if run >= Self.minHoleFrames, run <= maxHoleFrames,
+                   runStartMagnitude >= CapturePipeline.dropoutEdge, magnitude >= CapturePipeline.dropoutEdge {
+                    holes += 1
+                    holeFrames += run
+                }
+                endRun()
+                signalSeen = true
+                spanFrames += 1
+                lastMagnitude = magnitude
+            }
+        }
+    }
+
+    /// At least `minZeroSeconds` of zeros, and more than half of the span after the first sound.
+    func isMostlyZero(sampleRate: Double) -> Bool {
+        Double(zeroFrames) >= Self.minZeroSeconds * sampleRate && zeroFrames * 2 > spanFrames
+    }
+
+    private mutating func endRun() {
+        if run >= Self.minRunFrames { closedZeroFrames += run }
+        run = 0
+    }
+}
+
 final class CaptureTimelineLog: @unchecked Sendable {
     enum Kind: UInt8 { case jump, dropout, lateStart }
     struct Entry { var kind: Kind; var position: Int; var frames: Int }
