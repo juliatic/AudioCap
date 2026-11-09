@@ -23,7 +23,8 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 5. **Serial writer** (only owner of the file) writes a **CAF** capture.
 6. **Stop**: close the file, check frame count against the header.
 7. **Export** to WAV Float32, FLAC 24-bit, ALAC or AAC 256, then a **duration check**.
-8. Planned: **library + player**; **Hi-Res** virtual output device with a separate **monitor** on the real speakers.
+8. Planned: **library + player**.
+9. **Hi-Res mode** (on when the driver is installed): while recording, the system output is the silent `AudioCap Hi-Res` device at the chosen rate, the aggregate is clocked by it, and `AudioMonitor` plays a resampled copy on the remembered real device. Code: `AudioCap/HiRes/`, driver: `AudioCapHiRes/` (target `AudioCapHiRes`, from Apple's NullAudio sample, license in `AudioCapHiRes/LICENSE-NullAudio.txt`).
 
 | Stage | What it does | Status |
 |-------|--------------|--------|
@@ -37,7 +38,7 @@ Diagram: [`docs/img/architecture.svg`](docs/img/architecture.svg) (Spanish: [`ar
 | Auto-record, "All system audio" | arm on sound above −60 dBFS, stop after 2 s of silence | planned (PR 3) |
 | Library + player, level meter, output folder `~/Music/AudioCap`, Quality panel | | planned (PR 4) |
 | Bilingual UI (String Catalog), ≥ 16 pt | | planned (PR 5) |
-| Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | | planned (PR 6) |
+| Hi-Res mode: `AudioCap Hi-Res` virtual output device + monitor on the real speakers | `HiResRouter` (state machine: remember output → persist restore record → switch → set rate; restore on stop, quit, next launch, device loss), `HiResRatePolicy` (Music track rate via AppleScript, else fixed 96 kHz, up to 192), `AudioMonitor` (ring buffer → `AVAudioEngine` on the real device, only this copy is resampled) | PR 6 |
 
 When a planned item lands, move it to "shipped" here in the same PR.
 
@@ -58,6 +59,7 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 | Build and install, do not open | `./start.sh --no-open` |
 | Build into `./build` only, leave `/Applications` alone | `./start.sh --no-install` |
 | Unit tests | `./start.sh --test` |
+| Install / remove the `AudioCap Hi-Res` driver (one admin prompt, restarts coreaudiod) | `./start.sh --install-driver` / `./start.sh --uninstall-driver` |
 | Help | `./start.sh --help` |
 | Raw build | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -configuration Release -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build` |
 | Raw tests | `timeout 900 xcodebuild -project AudioCap.xcodeproj -scheme AudioCap -derivedDataPath build/DerivedData -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= test` |
@@ -86,11 +88,16 @@ Every command gets an explicit timeout. `timeout` comes from GNU coreutils (`bre
 - **Interleaved buffers expose only `floatChannelData[0]`.** Tap buffers are interleaved Float32; `floatChannelData[1]` does not exist. Index frames as `data[frame * channelCount + channel]`, or check `format.isInterleaved` first.
 - **The final FLAC block gets lost** if the converter loop stops before `endOfStream`: `test.flac` is missing the last 3,412 frames (less than one 4,096-frame chunk). Always drain the converter, then compare frame counts.
 - **Close the file before converting.** Converting (or letting a player read) a file that the writer has not closed yields a header that disagrees with the data, so players run past the displayed length.
-- **A tap records at the rate the source app renders at, which is set by its output device.** A 96 kHz track played to a 48 kHz device (Bluetooth, most displays) is resampled before the tap sees it. Only Hi-Res mode (PR 6), which routes the system output to the `AudioCap Hi-Res` virtual device, avoids that.
+- **A tap records at the rate the source app renders at, which is set by its output device.** A 96 kHz track played to a 48 kHz device (Bluetooth, most displays) is resampled before the tap sees it. Only Hi-Res mode, which routes the system output to the `AudioCap Hi-Res` virtual device, avoids that.
+- **Hi-Res routing changes the system default output.** Always go through `HiResRouter`: it saves the restore record (`HiResRestoreRecord` in UserDefaults) *before* switching, so a crash is repaired at the next launch (`HiResController.recoverOnLaunch()`). Never set the default output elsewhere while routed. `ProcessTap` rebuilds its aggregate on the current default output, so call `syncAggregateWithDefaultOutput()` after routing/restoring.
+- **An app keeps rendering at the rate of the device it opened.** Apps that follow the system default (Music, Spotify, browsers) move to `AudioCap Hi-Res` when recording starts; `afplay` and other clients bound to a device do not, so the tap keeps their old rate. Start such test players after routing.
+- The monitor's `AVAudioEngine` output must never be the Hi-Res device (that would loop); `HiResRouter` only offers real outputs as the monitor target.
+- The driver runs in its own `Core Audio Driver (AudioCapHiRes.driver)` process. After `--install-driver`/`--uninstall-driver` coreaudiod is restarted; with SIP on, `launchctl kickstart` is refused and the script falls back to `killall coreaudiod`.
 - The tap sees audio **after** the app's volume, EQ, Sound Check and Spatial Audio, and `stereoMixdownOfProcesses` folds surround to stereo.
 - `./start.sh` installs into `/Applications/AudioCap.app`: it quits a running AudioCap (Apple Event `quit`, 10 s, then `pkill -x AudioCap`), replaces the old copy only after a successful build, and asks once for sudo (or stops with a clear message) when `/Applications` is not writable.
 - Changing the bundle id or ad-hoc re-signing can make macOS ask for the audio-capture permission again the first time the rebuilt app runs from `/Applications`. Reset it with `tccutil reset AudioCapture <bundle id>`.
 - The upstream sandboxed build saves to `~/Library/Containers/codes.rambo.samplecode.AudioCap/Data/Library/Application Support/AudioCap`; the plan moves output to `~/Music/AudioCap` (PR 4).
+- Reading Music's track rate needs `com.apple.security.automation.apple-events` + `com.apple.security.scripting-targets` (`com.apple.Music`) and `NSAppleEventsUsageDescription`; macOS asks the Automation permission the first time. If it is denied the fixed rate is used.
 
 ## Skills
 

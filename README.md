@@ -24,7 +24,7 @@ Planned (see the plan for details):
 - **Auto-record** (PR 3): arm it, and recording starts when the app makes sound and stops after silence. Plus an "All system audio" source.
 - **Library and player** (PR 4): every take with its status (recording, converting, done, failed), a player with waveform, a level meter, a **Quality** panel and the output folder `~/Music/AudioCap`.
 - **Spanish and English interface** (PR 5), with text of at least 16 pt.
-- **Hi-Res mode** (PR 6): record at the source's full rate even when you listen on Bluetooth or display speakers.
+- **Hi-Res mode**: record at the source's full rate (up to 192 kHz) even when you listen on Bluetooth or display speakers. `./start.sh` offers to install the `AudioCap Hi-Res` device once (or run `./start.sh --install-driver`); turn it off in AudioCap > Settings.
 
 ## Requirements
 
@@ -87,7 +87,7 @@ These screenshots show the current interface; they will be replaced when the int
 Short answer: lossless, but only bit-perfect when the sample rates match.
 
 - **Bit depth:** the tap delivers 32-bit float, which holds 16- and 24-bit audio exactly. WAV keeps that float data; FLAC and ALAC (new engine) store 24-bit.
-- **Sample rate:** a tap records at the rate the source app plays at, and the app plays at the rate of your **output device**. If a 96 kHz track plays to 48 kHz Bluetooth headphones or a 48 kHz display, it is resampled before AudioCap sees it. Match the output device's rate to the source (Audio MIDI Setup) for a bit-perfect copy. Hi-Res mode (planned, PR 6) removes this limit by routing playback through a virtual device while you keep listening on your speakers.
+- **Sample rate:** a tap records at the rate the source app plays at, and the app plays at the rate of your **output device**. If a 96 kHz track plays to 48 kHz Bluetooth headphones or a 48 kHz display, it is resampled before AudioCap sees it. Match the output device's rate to the source (Audio MIDI Setup) for a bit-perfect copy. Hi-Res mode removes this limit: while recording, playback goes to the silent `AudioCap Hi-Res` device at a high rate (the Music track's rate, or 96 kHz by default) and AudioCap plays a copy on your speakers or headphones. Your previous output comes back when you stop.
 - **Channels:** surround and Atmos are folded down to stereo.
 - **Source app settings:** app volume below 100 %, EQ, Sound Check and Spatial Audio change the audio before the tap.
 - **AAC/M4A is lossy.** Use WAV, FLAC or ALAC to keep the original.
