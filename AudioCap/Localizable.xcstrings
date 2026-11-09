@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ (waiting)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (waiting)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (en espera)"
+          }
+        }
+      }
+    },
     "%@ ch" : {
       "extractionState" : "manual",
       "localizations" : {

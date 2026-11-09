@@ -9,6 +9,8 @@ struct ProcessSelectionView: View {
     @State private var recorder: ProcessTapRecorder?
 
     @State private var selectedProcess: AudioProcess?
+    /// Executable of the selected source, for following a relaunch of a process without a bundle ID.
+    @State private var selectedExecutablePath: String?
     @State private var settings = RecordingSettings.shared
 
     var body: some View {
@@ -27,6 +29,11 @@ struct ProcessSelectionView: View {
                     Text("All system audio")
                 }
                     .tag(Optional<AudioProcess>.some(.allSystemAudio))
+
+                if let selectedProcess, selectedProcess.kind != .system, !processController.processes.contains(selectedProcess) {
+                    Text("\(selectedProcess.name) (waiting)")
+                        .tag(Optional<AudioProcess>.some(selectedProcess))
+                }
 
                 ForEach(processController.processGroups) { group in
                     Section {
@@ -53,8 +60,14 @@ struct ProcessSelectionView: View {
             .onChange(of: OutputFolder.shared.url) {
                 if recorder?.status == .idle, recorder?.isConverting == false { createRecorder() }
             }
+            .onChange(of: processController.processes) { followRelaunchedSource() }
             .onChange(of: selectedProcess) { oldValue, newValue in
                 guard newValue != oldValue else { return }
+                // A relaunch of the same source: the tap re-attaches by itself, keep the recorder.
+                if let oldValue, let newValue, SourceSelection.isRelaunch(of: oldValue, executablePath: selectedExecutablePath,
+                                                                          candidate: newValue, candidatePath: newValue.objectID.readProcessExecutablePath()) {
+                    return
+                }
 
                 if let newValue {
                     setupRecording(for: newValue)
@@ -81,8 +94,17 @@ struct ProcessSelectionView: View {
         }
     }
 
+    private func followRelaunchedSource() {
+        guard let selected = selectedProcess,
+              let row = SourceSelection.row(for: selected, executablePath: selectedExecutablePath, in: processController.processes,
+                                            path: { $0.objectID.readProcessExecutablePath() }),
+              row != selected else { return }
+        selectedProcess = row
+    }
+
     private func setupRecording(for process: AudioProcess) {
         teardownTap()
+        selectedExecutablePath = process.kind == .system ? nil : process.objectID.readProcessExecutablePath()
         let newTap = ProcessTap(process: process)
         self.tap = newTap
         newTap.activate()
