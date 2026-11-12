@@ -18,11 +18,11 @@ final class CaptureWriter {
         var errorDescription: String? {
             switch self {
             case .frameCountMismatch(let expected, let onDisk):
-                "The capture file has \(onDisk) frames, but \(expected) were written."
+                String(localized: "The capture file has \(onDisk) frames, but \(expected) were written.")
             case .formatMismatch(let expected, let received):
-                "A buffer in format \(received) was sent to a capture file in format \(expected)."
+                String(localized: "A buffer in format \(received) was sent to a capture file in format \(expected).")
             case .alreadyFinished:
-                "The capture file was already closed."
+                String(localized: "The capture file was already closed.")
             }
         }
     }

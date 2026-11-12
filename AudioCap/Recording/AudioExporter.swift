@@ -24,12 +24,11 @@ enum AudioExporter {
         var errorDescription: String? {
             switch self {
             case .emptySource:
-                "The recording has no audio."
+                String(localized: "The recording has no audio.")
             case .tooShort(let format, let frames, let minimum):
-                "The take has \(frames) frames; \(format.displayName) needs at least \(minimum). Keep it as WAV instead."
+                String(localized: "The take has \(frames) frames; \(format.displayName) needs at least \(minimum). Keep it as WAV instead.")
             case .durationMismatch(let url, let expected, let actual, let rate):
-                String(format: "%@ has %lld frames (%.3f s), expected %lld frames (%.3f s).",
-                       url.lastPathComponent, actual, Double(actual) / rate, expected, Double(expected) / rate)
+                String(localized: "\(url.lastPathComponent) has \(actual) frames (\((Double(actual) / rate).formatted(.number.precision(.fractionLength(3)))) s), expected \(expected) frames (\((Double(expected) / rate).formatted(.number.precision(.fractionLength(3)))) s).")
             }
         }
     }

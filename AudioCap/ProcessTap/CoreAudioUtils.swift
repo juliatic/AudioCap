@@ -47,13 +47,13 @@ extension AudioObjectID {
 
         var err = AudioObjectGetPropertyDataSize(self, &address, 0, nil, &dataSize)
 
-        guard err == noErr else { throw CoreAudioError(operation: "Reading the data size of \(address)", status: err) }
+        guard err == noErr else { throw CoreAudioError(operation: String(localized: "Reading the data size of \(address.description)"), status: err) }
 
         var value = [AudioObjectID](repeating: .unknown, count: Int(dataSize) / MemoryLayout<AudioObjectID>.size)
 
         err = AudioObjectGetPropertyData(self, &address, 0, nil, &dataSize, &value)
 
-        guard err == noErr else { throw CoreAudioError(operation: "Reading \(address)", status: err) }
+        guard err == noErr else { throw CoreAudioError(operation: String(localized: "Reading \(address.description)"), status: err) }
 
         return value
     }
@@ -69,7 +69,7 @@ extension AudioObjectID {
         )
 
         guard processObject.isValid else {
-            throw "Invalid process identifier: \(pid)"
+            throw String(localized: "Invalid process identifier: \(String(pid))")
         }
 
         return processObject
@@ -117,7 +117,7 @@ extension AudioObjectID {
     }
 
     private func requireSystemObject() throws {
-        if self != .system { throw "Only supported for the system object." }
+        if self != .system { throw String(localized: "Only supported for the system object.") }
     }
 }
 
@@ -170,7 +170,7 @@ extension AudioObjectID {
         var err = AudioObjectGetPropertyDataSize(self, &address, inQualifierSize, inQualifierData, &dataSize)
 
         guard err == noErr else {
-            throw CoreAudioError(operation: "Reading the data size of \(inAddress)", status: err)
+            throw CoreAudioError(operation: String(localized: "Reading the data size of \(inAddress.description)"), status: err)
         }
 
         var value: T = defaultValue
@@ -179,7 +179,7 @@ extension AudioObjectID {
         }
 
         guard err == noErr else {
-            throw CoreAudioError(operation: "Reading \(inAddress)", status: err)
+            throw CoreAudioError(operation: String(localized: "Reading \(inAddress.description)"), status: err)
         }
 
         return value

@@ -10,16 +10,14 @@ struct HiResStatusView: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let decision = controller.rateDecision, controller.isRouted {
                     Text("Hi-Res: \(HiResDevice.rateString(decision.rate)) (\(sourceLabel(decision.source))) · monitor: \(monitorDescription)")
-                        .font(.caption)
+                        .font(AppStyle.detail)
                 } else if controller.isDriverAvailable {
                     Text("Hi-Res is on. Recording switches the system output to AudioCap Hi-Res and restores it when you stop.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .secondaryTextStyle()
                 }
                 if let message = controller.message {
                     Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                        .warningTextStyle()
                 }
                 if controller.isDriverAvailable {
                     HStack {

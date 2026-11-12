@@ -11,8 +11,7 @@ struct HiResSettingsView: View {
                 Toggle("Hi-Res mode", isOn: $settings.isEnabled)
                     .onChange(of: settings.isEnabled) { controller.logEnabledChanged() }
                 Text("While recording, apps play into the silent AudioCap Hi-Res device at a high sample rate, and AudioCap plays a copy on your speakers or headphones. Only that copy is resampled.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .secondaryTextStyle()
 
                 Picker("Rate for other apps", selection: $settings.fixedRate) {
                     ForEach(HiResDevice.supportedRates, id: \.self) { rate in
@@ -21,19 +20,20 @@ struct HiResSettingsView: View {
                 }
                 .disabled(!settings.isEnabled)
                 Text("Music.app recordings use the sample rate of the current track. Other apps, or tracks with an unknown rate, use this rate.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .secondaryTextStyle()
 
                 if controller.isDriverAvailable {
                     Label("Driver installed", systemImage: "checkmark.circle")
-                        .foregroundStyle(.secondary)
+                        .secondaryTextStyle()
                 } else {
                     Label("The AudioCap Hi-Res driver is not installed. Run ./start.sh --install-driver, then reopen AudioCap.", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                        .warningTextStyle()
                 }
             }
         }
         .formStyle(.grouped)
+        .font(AppStyle.body)
+        .disabled(controller.isRouted)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
     }

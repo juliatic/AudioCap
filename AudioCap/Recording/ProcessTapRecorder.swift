@@ -13,7 +13,7 @@ final class AtomicCounter: @unchecked Sendable {
 /// Data path: the aggregate device's I/O block runs on `ioQueue` and hands each buffer list to the current
 /// `CapturePipeline`, which converts it into a preallocated ring buffer without allocating (canonical Float32),
 /// measures its level and applies silence splitting. The pipeline's writer queue drains the ring into the take's
-/// `CaptureWriter`, which owns the CAF file. When a take ends, the file is closed and its frame count verified;
+/// `CaptureWriter`, which owns the CAF file; an `AutoRecordMachine` on that queue decides when takes open and close. When a take ends, the file is closed and its frame count verified;
 /// then `AudioExporter` converts it on `exportQueue` and checks the output duration.
 ///
 /// Stop order: `AudioDeviceStop` → drain `ioQueue` → drain the ring and close the writer → verify frames → export.
@@ -40,6 +40,12 @@ final class ProcessTapRecorder {
     private(set) var level: AudioLevel = .silence
     /// Frames written to the current take (0 between takes).
     private(set) var framesWritten: AVAudioFramePosition = 0
+    /// The take state machine's phase, refreshed with the level (`.armed` while waiting for sound).
+    private(set) var autoRecordPhase: AutoRecordMachine.Phase = .idle
+    /// The recording mode of the running session (or of the next one while idle).
+    private(set) var mode: AutoRecordMachine.Mode
+    /// Running in "Wait for sound" mode with no take open.
+    var isWaitingForSound: Bool { status == .recording && autoRecordPhase == .armed }
     /// Every take of this recorder, oldest first.
     private(set) var takes: [RecordingTake] = []
     /// The validated format of the running capture.
@@ -61,6 +67,7 @@ final class ProcessTapRecorder {
     @ObservationIgnored private weak var tap: ProcessTap?
     @ObservationIgnored private let initialProcess: AudioProcess
     @ObservationIgnored private let settings: RecordingSettings
+    @ObservationIgnored private let autoRecordSettings: AutoRecordSettings
     @ObservationIgnored private let logger: Logger
     @ObservationIgnored private let ioQueue = DispatchQueue(label: "ProcessTapRecorder.io", qos: .userInteractive)
     @ObservationIgnored private let exportQueue = DispatchQueue(label: "ProcessTapRecorder.export", qos: .userInitiated)
@@ -73,6 +80,12 @@ final class ProcessTapRecorder {
     @ObservationIgnored private var silenceGuard = DigitalSilenceGuard(seconds: ProcessTapRecorder.digitalSilenceRecoverySeconds)
     /// A non-zero sample arrived since `start()` (in any take or pipeline).
     @ObservationIgnored private var sessionHasSignal = false
+    /// See `IdleTapRefresh`. Main thread only.
+    @ObservationIgnored private var lastIdleTapRefresh: Date?
+    @ObservationIgnored private var isRefreshingIdleTap = false
+    @ObservationIgnored private(set) var idleTapRefreshes = 0
+    @ObservationIgnored private var lastChopRebuild: Date?
+    @ObservationIgnored private(set) var chopRebuilds = 0
     /// I/O cycles that arrived while no pipeline was attached (between takes or while gated).
     @ObservationIgnored private let unattachedCycles = AtomicCounter()
     @ObservationIgnored private var eventContinuations: [UUID: AsyncStream<TakeEvent>.Continuation] = [:]
@@ -83,6 +96,7 @@ final class ProcessTapRecorder {
         var autoSplit: Bool
         var thresholdDb: Double
         var minSilenceDuration: Double
+        var autoRecord: AutoRecordMachine.Configuration
     }
 
     private struct IOState {
@@ -93,11 +107,14 @@ final class ProcessTapRecorder {
         var isGated = false
     }
 
-    init(tap: ProcessTap, outputDirectory: URL = .applicationSupport, settings: RecordingSettings = .shared) {
+    init(tap: ProcessTap, outputDirectory: URL = .applicationSupport, settings: RecordingSettings = .shared,
+         autoRecordSettings: AutoRecordSettings = .shared) {
         self.tap = tap
         self.initialProcess = tap.process
         self.outputDirectory = outputDirectory
         self.settings = settings
+        self.autoRecordSettings = autoRecordSettings
+        self.mode = autoRecordSettings.mode
         self.logger = Logger(subsystem: kAppSubsystem, category: "ProcessTapRecorder(\(tap.process.name))")
     }
 
@@ -122,13 +139,19 @@ final class ProcessTapRecorder {
             logger.warning("\(#function, privacy: .public) while already recording")
             return
         }
-        guard let tap else { throw "The process tap is not available." }
+        guard let tap else { throw String(localized: "The process tap is not available.") }
         lastError = nil
         silenceGuard.reset()
+        lastIdleTapRefresh = nil
+        idleTapRefreshes = 0
+        lastChopRebuild = nil
+        chopRebuilds = 0
         silenceWarning = nil
         sessionHasSignal = false
         session = SessionSettings(outputFormat: settings.outputFormat, autoSplit: settings.autoSplitOnSilence,
-                                  thresholdDb: settings.silenceThresholdDb, minSilenceDuration: settings.minSilenceDuration)
+                                  thresholdDb: settings.silenceThresholdDb, minSilenceDuration: settings.minSilenceDuration,
+                                  autoRecord: autoRecordSettings.configuration)
+        mode = autoRecordSettings.mode
         HiResController.shared.begin(for: tap)
         do {
             let format = try tap.start(on: ioQueue, ioBlock: { [weak self] _, inputData, inputTime, _, _ in
@@ -177,7 +200,7 @@ final class ProcessTapRecorder {
             ioQueue.sync {
                 io.isGated = true
                 // The restarted device has a new sample timeline; that is a reconnect, not a lost-audio jump.
-                io.pipeline?.noteReconnect()
+                io.pipeline?.noteReconnect(chargesTake: !isRefreshingIdleTap)
             }
         case .willStart(let format):
             // Install the pipeline before AudioDeviceStart so the first I/O cycles are kept.
@@ -209,9 +232,12 @@ final class ProcessTapRecorder {
         endPipeline()
         guard let session else { return }
         let detector = session.autoSplit ? SilenceDetector(thresholdDb: session.thresholdDb, minSilenceDuration: session.minSilenceDuration) : nil
-        let options = CapturePipeline.Options(outputDirectory: outputDirectory, outputFormat: session.outputFormat,
+        var options = CapturePipeline.Options(outputDirectory: outputDirectory, outputFormat: session.outputFormat,
                                               sourceName: process.name, silenceDetector: detector,
                                               makeBaseName: { [weak self] in self?.uniqueBaseName() ?? UUID().uuidString })
+        options.autoRecord = session.autoRecord
+        options.isAllSystemAudio = process.kind == .system
+        options.mode = mode
         let pipeline = CapturePipeline(format: format, options: options) { [weak self] event in
             DispatchQueue.main.async { self?.handle(event) }
         }
@@ -221,9 +247,18 @@ final class ProcessTapRecorder {
             io.isGated = false
         }
         captureFormat = format
+        autoRecordPhase = pipeline.phase
         HiResController.shared.formatChanged(format)
         let monitorRing = HiResController.shared.activeMonitor?.ringBuffer
         ioQueue.sync { io.monitorRing = monitorRing }
+    }
+
+    /// Switches between "Wait for sound" and manual. Applies to the running session at once.
+    @MainActor
+    func setMode(_ newMode: AutoRecordMachine.Mode) {
+        guard newMode != mode else { return }
+        mode = newMode
+        pipeline?.setMode(newMode)
     }
 
     /// Detaches the pipeline from the I/O block, then drains and closes it.
@@ -245,6 +280,10 @@ final class ProcessTapRecorder {
             if case .exporting = take.status { export(take) }
         case .discarded(let id):
             remove(id)
+        case .amended(let id, let warning):
+            guard let index = takes.firstIndex(where: { $0.id == id }) else { return }
+            takes[index].warnings.append(warning)
+            eventContinuations.values.forEach { $0.yield(.updated(takes[index])) }
         case .failed(let message):
             lastError = message
             logger.error("\(message, privacy: .public)")
@@ -284,7 +323,7 @@ final class ProcessTapRecorder {
                 take.status = .completed
                 logger.info("Exported \(take.outputURL.lastPathComponent, privacy: .public): \(result.frameCount) frames")
             } catch {
-                take.status = .failed(message: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent).")
+                take.status = .failed(message: String(localized: "Export to \(take.outputFormat.displayName) failed: \(error.audioCapDescription) The capture is kept at \(take.captureURL.lastPathComponent)."))
                 logger.error("Export failed: \(error.audioCapDescription, privacy: .public)")
             }
             DispatchQueue.main.async { self.upsert(take, event: .updated(take)) }
@@ -322,13 +361,47 @@ final class ProcessTapRecorder {
         guard let pipeline else {
             if level != .silence { level = .silence }
             if framesWritten != 0 { framesWritten = 0 }
+            if autoRecordPhase != .idle { autoRecordPhase = .idle }
             return
         }
+        let phase = pipeline.phase
+        if autoRecordPhase != phase { autoRecordPhase = phase }
         let newLevel = pipeline.level
         if level != newLevel { level = newLevel }
         let frames = AVAudioFramePosition(pipeline.currentTakeFrames.load(ordering: .relaxed))
         if framesWritten != frames { framesWritten = frames }
         checkDigitalSilence(pipeline)
+        refreshIdleTapIfNeeded(pipeline)
+        rebuildChoppedTapIfNeeded(pipeline)
+    }
+
+    @MainActor
+    private func rebuildChoppedTapIfNeeded(_ pipeline: CapturePipeline) {
+        let cuts = pipeline.chops.load(ordering: .relaxed)
+        guard let tap,
+              ChoppedCapture.shouldRebuild(isTakeOpen: pipeline.isTakeOpen.load(ordering: .relaxed), cuts: cuts,
+                                           sourceIsPlaying: tap.isSourceOutputting,
+                                           secondsSinceLastRebuild: lastChopRebuild.map { Date().timeIntervalSince($0) })
+        else { return }
+        lastChopRebuild = Date()
+        chopRebuilds += 1
+        logger.warning("Capture chopped (\(cuts, privacy: .public) cuts to digital zero while the source plays); recreating the tap")
+        tap.recreateTap(reason: "\(cuts) cuts to digital zero in the open take while the source plays")
+    }
+
+    @MainActor
+    private func refreshIdleTapIfNeeded(_ pipeline: CapturePipeline) {
+        let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
+        guard silentSeconds >= IdleTapRefresh.interval, let tap,
+              IdleTapRefresh.shouldRefresh(isTakeOpen: pipeline.isTakeOpen.load(ordering: .relaxed), silentSeconds: silentSeconds,
+                                           sourceIsPlaying: tap.isSourceOutputting,
+                                           secondsSinceLastRefresh: lastIdleTapRefresh.map { Date().timeIntervalSince($0) })
+        else { return }
+        lastIdleTapRefresh = Date()
+        idleTapRefreshes += 1
+        isRefreshingIdleTap = true
+        tap.recreateTap(reason: "no take open and \(Int(silentSeconds)) s of digital silence while the source plays")
+        isRefreshingIdleTap = false
     }
 
     /// Guards against a capture that never delivers signal (seen right after the permission is granted).
@@ -336,6 +409,7 @@ final class ProcessTapRecorder {
     @MainActor
     private func checkDigitalSilence(_ pipeline: CapturePipeline) {
         if pipeline.hasSeenSignal { sessionHasSignal = true }
+        pipeline.sourceIsOutputting.store(tap?.isSourceOutputting ?? false, ordering: .relaxed)
         let silentSeconds = Double(pipeline.digitalSilenceRun.load(ordering: .relaxed)) / pipeline.format.sampleRate
         let wasArmed = silenceGuard.state != .disarmed
         silenceGuard.update(silentSeconds: silentSeconds, hasSeenSignal: sessionHasSignal,
@@ -353,6 +427,7 @@ final class ProcessTapRecorder {
         meterTimer = nil
         level = .silence
         framesWritten = 0
+        autoRecordPhase = .idle
         silenceGuard.reset()
         silenceWarning = nil
     }
@@ -403,6 +478,10 @@ final class ProcessTapRecorder {
         lines.append("I/O cycles with no pipeline attached: \(unattachedCycles.value.load(ordering: .relaxed))")
         if let pipeline {
             lines.append("Device timeline: \(pipeline.discontinuities.load(ordering: .relaxed)) jumps, \(pipeline.skippedFrames.load(ordering: .relaxed)) frames skipped")
+            let refreshGap = Double(pipeline.idleRefreshGapFrames.load(ordering: .relaxed)) / pipeline.format.sampleRate
+            lines.append("Rebuilds of a chopped tap: \(chopRebuilds)")
+            lines.append("Idle tap refreshes: \(idleTapRefreshes), uncaptured \(refreshGap.formatted(.number.precision(.fractionLength(3)))) s in total")
+            lines.append("Dropouts (zeros mid-signal while the source plays): \(pipeline.dropouts.load(ordering: .relaxed)), \(pipeline.dropoutFrames.load(ordering: .relaxed)) frames")
             lines.append("Capture pipeline: \(pipeline.ioCycles.load(ordering: .relaxed)) I/O cycles, \(pipeline.layoutMismatches.load(ordering: .relaxed)) layout mismatches, \(pipeline.ring.overflowFrames.load(ordering: .relaxed)) overflow frames, ring \(pipeline.ring.capacity) frames, digital silence run \(pipeline.digitalSilenceRun.load(ordering: .relaxed)) frames")
         }
         if let silenceWarning { lines.append("Silence warning: \(silenceWarning)") }
@@ -414,7 +493,9 @@ final class ProcessTapRecorder {
         let rate = writerFormat?.sampleRate ?? 48_000
         let channels = writerFormat?.channelCount ?? 2
         lines.append("Export format: \(outputFormat.displayName), settings: \(Diagnostics.describe(settings: AudioExporter.fileSettings(for: outputFormat, sampleRate: rate, channelCount: channels)))")
-        lines.append("Auto-split: \(settings.autoSplitOnSilence) (threshold \(settings.silenceThresholdDb) dB, min \(settings.minSilenceDuration) s)")
+        let auto = autoRecordSettings.configuration
+        lines.append("Recording mode: \(mode.rawValue), phase \(autoRecordPhase) (threshold \(auto.thresholdDb) dBFS RMS, close after \(auto.minSilence) s, pre-roll \(auto.preRoll) s, tail \(auto.tail) s)")
+        lines.append("Auto-split (manual mode): \(settings.autoSplitOnSilence) (threshold \(settings.silenceThresholdDb) dB, min \(settings.minSilenceDuration) s)")
         lines.append("Last error: \(lastError ?? "none")")
         for take in takes.suffix(10) {
             lines.append("Take \(take.outputURL.lastPathComponent): \(take.status), \(take.capturedFrames) frames captured, exported \(take.exportedFrames.map(String.init) ?? "-"), format \(take.captureFormatDescription)\(take.warning.map { ", warning: \($0)" } ?? "")")

@@ -13,14 +13,19 @@ struct RecordingView: View {
         Section {
             HStack {
                 if recorder.isRecording {
-                    Button("Stop") {
+                    Button(readable: "Stop") {
                         recorder.stop()
                     }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help(Text("Stop recording (⌘R)"))
                     .id("button")
                 } else {
-                    Button("Start") {
+                    Button(readable: "Start") {
                         handlingErrors { try recorder.start() }
                     }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help(Text("Start recording (⌘R)"))
+                    .disabled(recorder.isConverting)
                     .id("button")
 
                     if let url = recorder.lastCompletedURL {
@@ -32,27 +37,29 @@ struct RecordingView: View {
                 Spacer()
 
                 if recorder.isRecording {
-                    LevelMeter(level: recorder.level)
-                        .frame(width: 120, height: 6)
+                    LevelMeterView(level: recorder.level)
+                        .frame(width: 240)
                     Text(timeString(recorder.framesWritten))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .secondaryTextStyle()
+                        .accessibilityLabel(Text("Recorded time"))
                 }
             }
             .animation(.smooth, value: recorder.isRecording)
             .animation(.smooth, value: recorder.lastCompletedURL)
 
             if let format = recorder.captureFormat {
-                LabeledContent("Capture format", value: format.description)
-                    .font(.callout)
+                LabeledContent("Capture format", value: format.displayDescription)
             }
 
             HiResStatusView()
 
             if recorder.status == .waitingForSource {
                 Text("Waiting for \(recorder.process.name) to start again…")
-                    .foregroundStyle(.secondary)
+                    .secondaryTextStyle()
             }
+
+            AutoRecordControls(recorder: recorder)
 
             // Recording settings
             VStack(alignment: .leading, spacing: 8) {
@@ -60,54 +67,58 @@ struct RecordingView: View {
                     Text("Auto-split on silence")
                 }
                 .tint(.green)
-                .disabled(recorder.isRecording)
+                .disabled(isLocked || recorder.mode == .waitForSound)
 
                 HStack(spacing: 8) {
                     LabeledContent("Format") {
                         Picker("Format", selection: $settings.outputFormat) {
                             ForEach(RecordingSettings.OutputFormat.allCases, id: \.self) { format in
-                                Text(format.displayName).tag(format)
+                                Text(format.displayName).font(AppStyle.body).tag(format)
                             }
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(width: 200)
-                        .disabled(recorder.isRecording) // lock format while recording
+                        .frame(width: 260)
+                        .disabled(isLocked)
                     }
                 }
 
                 HStack(spacing: 8) {
                     LabeledContent("Threshold (dB)") {
-                        TextField("", value: $settings.silenceThresholdDb, format: .number)
+                        TextField("Threshold (dB)", value: $settings.silenceThresholdDb, format: .number)
+                            .labelsHidden()
                             .frame(width: 80)
                             .textFieldStyle(.roundedBorder)
+                            .font(AppStyle.body)
                     }
                     LabeledContent("Min silence (s)") {
-                        TextField("", value: $settings.minSilenceDuration, format: .number)
+                        TextField("Min silence (s)", value: $settings.minSilenceDuration, format: .number)
+                            .labelsHidden()
                             .frame(width: 80)
                             .textFieldStyle(.roundedBorder)
+                            .font(AppStyle.body)
                     }
                 }
-                .disabled(recorder.isRecording)
+                .disabled(isLocked)
             }
 
             if let warning = recorder.silenceWarning {
                 Label(warning, systemImage: "speaker.slash")
-                    .foregroundStyle(.orange)
+                    .warningTextStyle()
             }
 
             if let error = recorder.lastError {
                 Text(error)
-                    .foregroundStyle(.red)
+                    .errorTextStyle()
                     .textSelection(.enabled)
             }
 
             HStack {
-                Button("Show Recordings in Finder") {
+                Button(readable: "Show Recordings in Finder") {
                     NSWorkspace.shared.open(recorder.outputDirectory)
                 }
                 Spacer()
-                Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
+                Button(readable: copiedDiagnostics ? LocalizedStringKey("Copied") : LocalizedStringKey("Copy Diagnostics")) {
                     Diagnostics.copyToPasteboard(recorder.diagnosticsReport())
                     copiedDiagnostics = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedDiagnostics = false }
@@ -116,26 +127,24 @@ struct RecordingView: View {
         } header: {
             HStack {
                 RecordingIndicator(appIcon: recorder.process.icon, isRecording: recorder.isRecording)
+                    .accessibilityHidden(true)
 
                 Text(headerTitle)
-                    .font(.headline)
+                    .font(AppStyle.headline)
                     .contentTransition(.identity)
             }
-        }
-
-        if !recorder.takes.isEmpty {
-            Section("Takes") {
-                ForEach(recorder.takes.reversed()) { take in
-                    TakeRow(take: take)
-                }
-            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
         }
     }
 
+    /// Settings and the start button stay locked while a take is recorded or exported.
+    private var isLocked: Bool { recorder.isRecording || recorder.isConverting }
+
     private var headerTitle: String {
-        if recorder.isRecording { return "Recording from \(recorder.process.name)" }
-        if recorder.isConverting { return "Exporting…" }
-        return "Ready to Record from \(recorder.process.name)"
+        if recorder.isRecording { return String(localized: "Recording from \(recorder.process.name)") }
+        if recorder.isConverting { return String(localized: "Exporting…") }
+        return String(localized: "Ready to Record from \(recorder.process.name)")
     }
 
     private func timeString(_ frames: Int64) -> String {
@@ -150,76 +159,13 @@ struct RecordingView: View {
         } catch {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Recording could not start"
+            alert.messageText = String(localized: "Recording could not start")
             alert.informativeText = error.audioCapDescription
-            alert.addButton(withTitle: "OK")
-            alert.addButton(withTitle: "Copy Diagnostics")
+            alert.addButton(withTitle: String(localized: "OK"))
+            alert.addButton(withTitle: String(localized: "Copy Diagnostics"))
             if alert.runModal() == .alertSecondButtonReturn {
                 Diagnostics.copyToPasteboard(recorder.diagnosticsReport())
             }
         }
-    }
-}
-
-private struct TakeRow: View {
-    let take: RecordingTake
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(take.outputURL.lastPathComponent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("\(take.captureFormatDescription) → \(take.outputFormat.displayName) · \(String(format: "%.3f s", take.duration))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let warning = take.warning {
-                    Text(warning)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .textSelection(.enabled)
-                }
-                if case .failed(let message) = take.status {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer()
-            switch take.status {
-            case .recording:
-                Text("Recording").foregroundStyle(.red)
-            case .exporting(let progress):
-                ProgressView(value: progress)
-                    .frame(width: 80)
-            case .completed:
-                Button("Show in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([take.outputURL])
-                }
-            case .failed:
-                Button("Show Capture") {
-                    NSWorkspace.shared.activateFileViewerSelecting([take.captureURL])
-                }
-            }
-        }
-    }
-}
-
-private struct LevelMeter: View {
-    let level: AudioLevel
-
-    var body: some View {
-        GeometryReader { proxy in
-            let fraction = max(0, min(1, (level.peakDb + 60) / 60))
-            ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule()
-                    .fill(level.peakDb > -1 ? Color.red : Color.green)
-                    .frame(width: proxy.size.width * fraction)
-            }
-        }
-        .accessibilityLabel(Text("Level"))
-        .accessibilityValue(Text(String(format: "%.0f dB", level.peakDb)))
     }
 }

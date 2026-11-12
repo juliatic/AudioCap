@@ -16,6 +16,8 @@ A recording equals the source only when all of these hold:
 - [ ] Source bit depth ≤ 24 (Float32 holds 16/24-bit integers exactly).
 - [ ] System volume: expected not to matter (the tap is before the device); confirm with the null test.
 
+In the app: the **Quality** panel shows the same checks (green "bit-perfect path" or yellow reasons), and the built-in player shows **Header**, **Decoded** and **Captured** lengths for each take; any difference is flagged.
+
 ## Null test
 1. Make a reference with a sharp start (pink noise from sample 0), at the rate under test:
    ```

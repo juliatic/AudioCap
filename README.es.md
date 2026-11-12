@@ -4,27 +4,23 @@
 
 AudioCap graba el sonido de una sola app de tu Mac (Música, Spotify, un navegador…) directamente desde macOS, con los **taps de proceso** de CoreAudio. Sin drivers de bucle, sin micrófono y sin volver a grabar lo que sale por los altavoces.
 
-Este fork se está rehaciendo porque la grabación dejó de funcionar tras una actualización reciente de macOS. El plan está en [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). En este README queda claro qué hace la app **hoy** y qué está **previsto**.
+Este fork se está rehaciendo porque la grabación dejó de funcionar tras una actualización reciente de macOS. El plan está en [`docs/planning/01_improvement_plan.md`](docs/planning/01_improvement_plan.md). Este README indica qué hacía la app antes de rehacerla y qué es **nuevo en esta versión**.
 
 ![Arquitectura de la cadena de grabación](docs/img/architecture.es.svg)
 
 ## Funciones
 
-Disponible hoy:
+Antes de rehacerla:
 - Elige cualquier app que esté sonando y graba solo esa app.
 - Guarda en WAV (coma flotante de 32 bits), M4A (AAC) o FLAC.
 - Opción de partir la grabación en varios archivos al detectar silencio, con un umbral (dB) y una duración mínima del silencio (segundos).
+- Interfaz en español e inglés que sigue el idioma de macOS, con texto de 16 pt como mínimo, colores de alto contraste, etiquetas para VoiceOver y control con el teclado (**⌘R** empieza y detiene la grabación).
 
-Problemas conocidos de la versión actual (los resuelve el nuevo motor de grabación, PR 1):
-- En versiones recientes de macOS, empezar a grabar en WAV puede fallar con el error `1718449215` (`'fmt?'`), o el archivo puede quedarse vacío.
-- A los FLAC les falta la última fracción de segundo, y algunos archivos indican una duración distinta del audio que contienen.
-
-Previsto (los detalles están en el plan):
+Novedades de esta versión (los detalles están en el plan):
 - **Nuevo motor de grabación** (PR 1): captura sin pérdida en CAF, FLAC de 24 bits, ALAC, WAV Float32 y AAC a 256 kbps; comprobación de duración en cada archivo; códigos de error descifrados y un botón **Copiar diagnóstico**.
-- **Grabación automática** (PR 3): la dejas preparada y empieza a grabar cuando la app suena y se detiene tras un silencio. Además, una fuente "Todo el audio del sistema".
+- **Grabación automática** (PR 3, "Esperar sonido", el modo por defecto): pulsa **Start** para dejarla a la espera; la toma empieza cuando el origen suena (con hasta medio segundo previo: menos si el origen empieza a sonar después de pulsar Start) y termina tras 2 s de silencio (ajustable), y vuelve a esperar. El modo **Manual** graba de Start a Stop. Además, una fuente "Todo el audio del sistema" (todo menos AudioCap).
 - **Biblioteca y reproductor** (PR 4): cada toma con su estado (grabando, convirtiendo, lista, con error), un reproductor con forma de onda, un medidor de nivel, un panel de **Calidad** y la carpeta de destino `~/Music/AudioCap`.
-- **Interfaz en español e inglés** (PR 5), con texto de 16 pt como mínimo.
-- **Modo Hi-Res**: graba a la frecuencia completa del original (hasta 192 kHz) aunque escuches por Bluetooth o por los altavoces de la pantalla. `./start.sh` ofrece instalar una vez el dispositivo `AudioCap Hi-Res` (o ejecuta `./start.sh --install-driver`); se desactiva en AudioCap > Ajustes.
+- **Modo Hi-Res** (PR 6): graba a la frecuencia completa del original (hasta 192 kHz) aunque escuches por Bluetooth o por los altavoces de la pantalla. `./start.sh` ofrece instalar una vez el dispositivo `AudioCap Hi-Res` (o ejecuta `./start.sh --install-driver`); se desactiva en AudioCap > Ajustes.
 
 ## Requisitos
 
@@ -60,7 +56,7 @@ DEVELOPMENT_TEAM = XXXXXXXXXX
 
 ## Uso
 
-1. Abre AudioCap, pulsa **Allow** (Permitir) y confírmalo en el aviso de macOS.
+1. Abre AudioCap, pulsa **Permitir** y confírmalo en el aviso de macOS.
 
    ![Pantalla de permiso](docs/images/es/permission.png)
    ![Aviso de permiso de macOS](docs/images/es/permission-prompt.png)
@@ -69,18 +65,18 @@ DEVELOPMENT_TEAM = XXXXXXXXXX
 
    ![Elegir la app de origen](docs/images/es/process-list.png)
 
-3. Elige el formato (y, si quieres, el corte por silencio) y pulsa **Start** (Empezar).
+3. Elige el formato (y, si quieres, el corte por silencio) y pulsa **Grabar**.
 
    ![Lista para grabar](docs/images/es/ready.png)
    ![Grabando](docs/images/es/recording.png)
 
-4. Pulsa **Stop** (Parar). Cuando el archivo se ha escrito, aparece su nombre.
+4. Pulsa **Detener**. Cuando el archivo se ha escrito, aparece su nombre.
 
    ![Grabación terminada](docs/images/es/finished.png)
 
 Ahora mismo las grabaciones se guardan en el contenedor de la app: `~/Library/Containers/codes.rambo.samplecode.AudioCap/Data/Library/Application Support/AudioCap` (lo explica [Solución de problemas](docs/troubleshooting.es.md#dónde-se-guardan-las-grabaciones)).
 
-Las capturas muestran la interfaz actual, que todavía está solo en inglés; se sustituirán cuando se traduzca (PR 5).
+La interfaz sigue el idioma de macOS: en español si el Mac está en español y en inglés en los demás casos. Para probar el otro idioma, ejecuta `open -n /Applications/AudioCap.app --args -AppleLanguages "(en)"`. Pulsa **⌘R** para empezar o detener una grabación, **Retorno** para el botón resaltado y **Tab** para pasar de un control a otro (con *Navegación con teclado* activada en Ajustes del Sistema > Teclado).
 
 ## Calidad de grabación
 
@@ -96,7 +92,7 @@ Cómo comprobarlo en tu propio Mac (prueba de nulo y comprobación de duración)
 
 ## Solución de problemas
 
-- [Guía de solución de problemas](docs/troubleshooting.es.md): códigos de error descifrados (`'fmt?'`, `'!obj'`…), cómo restablecer el permiso, dónde se guardan los archivos y qué hacer si salen vacíos o cortos.
+- [Guía de solución de problemas](docs/troubleshooting.es.md): códigos de error descifrados (`'fmt?'`, `'!obj'`…), cómo restablecer el permiso, dónde se guardan los archivos, qué hacer si salen vacíos o cortos y por qué una toma puede avisar de un corte de golpe donde el original se corta de verdad (AudioCap no puede distinguirlo de que CoreAudio entregue ceros).
 - [Notas sobre los taps de proceso de CoreAudio](docs/coreaudio-taps.md) para desarrolladores (en inglés).
 - Si quieres colaborar, o eres una herramienta de IA, empieza por [`AGENTS.md`](AGENTS.md).
 

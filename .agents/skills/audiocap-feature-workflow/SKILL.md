@@ -20,6 +20,7 @@ description: How a change to AudioCap goes from plan to merged PR - numbered pla
 1. Wave 0: Xcode project as folder-synchronised groups, `AudioCapTests` target, `Local.xcconfig`, empty String Catalog. After it, new files do not touch `project.pbxproj`.
 2. Wave 1 in parallel: PR 1 recording engine; PR 2 docs and AI instructions.
 3. Wave 2 on top of PR 1: PR 3 auto-record + "All system audio"; PR 4 library, player, meter, output folder, Quality panel; PR 5 bilingual UI, 16 pt, accessibility, final screenshots; PR 6 Hi-Res mode.
+4. Integration: one branch off `main` merges docs, engine, auto-record, library/player, bilingual UI and Hi-Res in that order (`--no-ff`). The engine wins on capture code; `Localizable.xcstrings` is the union of both sides, then checked against the build's `*.stringsdata` (none missing, none stale) and every key has Spanish.
 4. Integration: one branch with every child merged; the owner merges only that one, with "Create a merge commit".
 
 ## 4. PR body template
@@ -41,7 +42,7 @@ Never list something under "verified" that you did not run. If a run failed, say
 
 ## 5. Owner preferences
 - Spanish and English for UI and docs; Spanish must read naturally, not as a calque. Same headings in both READMEs.
-- Body text ≥ 16 pt in the UI.
+- Body text ≥ 16 pt in the UI (`AppStyle`), contrast ≥ 4.5:1, every control reachable by keyboard and labelled for VoiceOver, controls locked while a recording, conversion or request runs. New UI strings go in `Localizable.xcstrings` (English + Spanish) in the same PR; add only your own keys to keep merges small.
 - One launcher (`./start.sh`), zero manual steps.
 - Real screenshots and real SVG diagrams; no placeholders, no ASCII art, no Mermaid.
 - Maximum quality by default; be honest about where the signal is resampled or changed.

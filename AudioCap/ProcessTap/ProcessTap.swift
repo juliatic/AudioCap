@@ -81,6 +81,8 @@ final class ProcessTap {
     @ObservationIgnored private var listeners: [AudioPropertyListener] = []
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     @ObservationIgnored private var pendingRebuild: DispatchWorkItem?
+    /// Executable of the source, for recognizing a relaunch of a process without a bundle ID (e.g. `afplay`).
+    @ObservationIgnored private var sourceExecutablePath: String?
 
     @ObservationIgnored
     private(set) var activated = false
@@ -145,6 +147,7 @@ final class ProcessTap {
 
         guard isSourceAvailable else { return nil }
         do {
+            try refreshIdleTap()
             return try startIO()
         } catch {
             wantsRunning = false
@@ -162,9 +165,18 @@ final class ProcessTap {
         stopIO()
     }
 
+    /// A tap left idle between selection and Start can deliver only zeros for a source that is already playing
+    /// (seen at 48 kHz with `afplay` after ~40 s idle), so each Start uses a freshly created tap and aggregate.
+    private func refreshIdleTap() throws {
+        guard deviceProcID == nil, processTapID.isValid else { return }
+        pendingRebuild?.cancel()
+        destroyAggregateAndTap()
+        try prepare(for: process.objectID)
+    }
+
     private func startIO() throws -> CaptureFormat {
-        guard let ioQueue, let ioBlock else { throw "The capture queue is not configured." }
-        guard aggregateDeviceID.isValid else { throw errorMessage ?? "The aggregate device is not available." }
+        guard let ioQueue, let ioBlock else { throw String(localized: "The capture queue is not configured.") }
+        guard aggregateDeviceID.isValid else { throw errorMessage ?? String(localized: "The aggregate device is not available.") }
 
         errorMessage = nil
         logger.debug("Starting I/O")
@@ -213,13 +225,17 @@ final class ProcessTap {
     }
 
     private func stopIO() {
+        stopIO(deviceProcID, on: aggregateDeviceID)
+        deviceProcID = nil
+    }
+
+    private func stopIO(_ procID: AudioDeviceIOProcID?, on device: AudioObjectID) {
         isRunning = false
-        guard aggregateDeviceID.isValid, let deviceProcID else { return }
-        var err = AudioDeviceStop(aggregateDeviceID, deviceProcID)
+        guard device.isValid, let procID else { return }
+        var err = AudioDeviceStop(device, procID)
         if err != noErr { logger.warning("AudioDeviceStop: \(AudioStatus.describe(err), privacy: .public)") }
-        err = AudioDeviceDestroyIOProcID(aggregateDeviceID, deviceProcID)
+        err = AudioDeviceDestroyIOProcID(device, procID)
         if err != noErr { logger.warning("AudioDeviceDestroyIOProcID: \(AudioStatus.describe(err), privacy: .public)") }
-        self.deviceProcID = nil
     }
 
     // MARK: - Format
@@ -287,7 +303,7 @@ final class ProcessTap {
             }
         }
         lastFormatValidationError = firstError?.audioCapDescription
-        throw firstError ?? "The aggregate device has no readable input stream format."
+        throw firstError ?? String(localized: "The aggregate device has no readable input stream format.")
     }
 
     // MARK: - Setup
@@ -295,7 +311,14 @@ final class ProcessTap {
     private func prepare(for objectID: AudioObjectID) throws {
         errorMessage = nil
 
-        let tapDescription = CATapDescription(stereoMixdownOfProcesses: [objectID])
+        let tapDescription: CATapDescription
+        if process.kind == .system {
+            // AudioCap only has a process object once it has used audio; nothing to exclude before that.
+            let ownObject = (try? AudioObjectID.translatePIDToProcessObjectID(pid: ProcessInfo.processInfo.processIdentifier)) ?? .unknown
+            tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: ownObject == .unknown ? [] : [ownObject])
+        } else {
+            tapDescription = CATapDescription(stereoMixdownOfProcesses: [objectID])
+        }
         tapDescription.uuid = UUID()
         tapDescription.muteBehavior = muteWhenRunning ? .mutedWhenTapped : .unmuted
         var tapID: AUAudioObjectID = .unknown
@@ -305,6 +328,7 @@ final class ProcessTap {
 
         self.processTapID = tapID
         self.tapUUID = tapDescription.uuid
+        if let path = objectID.readProcessExecutablePath() { sourceExecutablePath = path }
         self.tapStreamDescription = try? tapID.readAudioTapStreamBasicDescription()
 
         try createAggregateDevice()
@@ -360,11 +384,19 @@ final class ProcessTap {
     }
 
     private func destroyAggregateAndTap() {
-        destroyAggregateDevice()
-        if processTapID.isValid {
-            let err = AudioHardwareDestroyProcessTap(processTapID)
+        destroy(aggregate: aggregateDeviceID, tap: processTapID)
+        aggregateDeviceID = .unknown
+        processTapID = .unknown
+    }
+
+    private func destroy(aggregate: AudioObjectID, tap: AudioObjectID) {
+        if aggregate.isValid {
+            let err = AudioHardwareDestroyAggregateDevice(aggregate)
+            if err != noErr { logger.warning("Destroying the aggregate device: \(AudioStatus.describe(err), privacy: .public)") }
+        }
+        if tap.isValid {
+            let err = AudioHardwareDestroyProcessTap(tap)
             if err != noErr { logger.warning("Destroying the process tap: \(AudioStatus.describe(err), privacy: .public)") }
-            processTapID = .unknown
         }
     }
 
@@ -448,37 +480,60 @@ final class ProcessTap {
     }
 
     /// `true` when the source app reports that it is playing audio right now.
+    /// The source reports running output; for "All system audio", any process other than AudioCap does.
     var isSourceOutputting: Bool {
-        isSourceAvailable && process.objectID.readProcessIsRunningOutput()
+        guard process.kind != .system else { return Self.isAnyOtherProcessOutputting() }
+        return isSourceAvailable && process.objectID.readProcessIsRunningOutput()
     }
 
-    /// Destroys and recreates the tap and the aggregate device, restarting I/O if it was running.
-    /// Not used by the silence guard (it only warns); kept for diagnostics and for future routing changes.
+    private static func isAnyOtherProcessOutputting() -> Bool {
+        let own = ProcessInfo.processInfo.processIdentifier
+        guard let objects = try? AudioObjectID.readProcessList() else { return false }
+        return objects.contains { $0.readProcessIsRunningOutput() && $0.readProcessPID() != own }
+    }
+
+    /// Replaces the tap and the aggregate device with fresh ones, restarting I/O if it was running.
+    /// Used to refresh a tap idling on digital silence (see `IdleTapRefresh`); the silence guard only warns.
+    /// The new tap and aggregate are built while the old ones still run, so capture stops only for the switch;
+    /// if building fails, the old ones keep running.
     @MainActor
     func recreateTap(reason: String) {
         guard activated, isSourceAvailable else { return }
         noteIO("Recreating the tap: \(reason)")
         pendingRebuild?.cancel()
         let wasRunning = wantsRunning && deviceProcID != nil
-        if wasRunning { eventHandler?(.willReconfigure) }
-        stopIO()
-        destroyAggregateAndTap()
+        let old = (tap: processTapID, uuid: tapUUID, aggregate: aggregateDeviceID, proc: deviceProcID,
+                   output: aggregateOutputDevice, rate: aggregateSampleRate, tapFormat: tapStreamDescription,
+                   tapOutputUID: tapOutputUID)
         do {
             try prepare(for: process.objectID)
-            if wasRunning {
+        } catch {
+            logger.error("Recreating the tap failed, keeping the current one: \(error.audioCapDescription, privacy: .public)")
+            if processTapID != old.tap { destroyAggregateAndTap() }
+            (processTapID, tapUUID, aggregateDeviceID, deviceProcID) = (old.tap, old.uuid, old.aggregate, old.proc)
+            (aggregateOutputDevice, aggregateSampleRate, tapStreamDescription) = (old.output, old.rate, old.tapFormat)
+            tapOutputUID = old.tapOutputUID
+            return
+        }
+        if wasRunning {
+            eventHandler?(.willReconfigure)
+            stopIO(old.proc, on: old.aggregate)
+            deviceProcID = nil
+            do {
                 let format = try startIO()
                 eventHandler?(.reconfigured(format))
+            } catch {
+                logger.error("Recreating the tap failed: \(error.audioCapDescription, privacy: .public)")
+                errorMessage = error.audioCapDescription
+                eventHandler?(.failed(error))
             }
-        } catch {
-            logger.error("Recreating the tap failed: \(error.audioCapDescription, privacy: .public)")
-            errorMessage = error.audioCapDescription
-            if wasRunning { eventHandler?(.failed(error)) }
         }
+        destroy(aggregate: old.aggregate, tap: old.tap)
     }
 
     @MainActor
     private func processListChanged() {
-        guard activated, let objects = try? AudioObjectID.readProcessList() else { return }
+        guard activated, process.kind != .system, let objects = try? AudioObjectID.readProcessList() else { return }
 
         if isSourceAvailable {
             guard !objects.contains(process.objectID) else { return }
@@ -490,9 +545,11 @@ final class ProcessTap {
             return
         }
 
-        guard let bundleID = process.bundleID,
-              let objectID = objects.first(where: { $0.readProcessBundleID() == bundleID }) else { return }
-        logger.info("Source process relaunched: \(bundleID, privacy: .public)")
+        guard let objectID = objects.first(where: {
+            Self.isRelaunch(bundleID: process.bundleID, executablePath: sourceExecutablePath,
+                            candidateBundleID: $0.readProcessBundleID(), candidatePath: $0.readProcessExecutablePath())
+        }) else { return }
+        logger.info("Source process relaunched: \(self.process.bundleID ?? self.sourceExecutablePath ?? "?", privacy: .public)")
         process.objectID = objectID
         if let pid = objectID.readProcessPID() { process.id = pid }
         do {
@@ -508,6 +565,14 @@ final class ProcessTap {
             isSourceAvailable = true
             if wantsRunning { eventHandler?(.failed(error)) }
         }
+    }
+
+    /// Whether a process object is a relaunch of the source: same bundle ID, or, for processes without one
+    /// (command-line players such as `afplay`), the same executable.
+    nonisolated static func isRelaunch(bundleID: String?, executablePath: String?, candidateBundleID: String?, candidatePath: String?) -> Bool {
+        if let bundleID { return candidateBundleID == bundleID }
+        guard let executablePath else { return false }
+        return candidateBundleID == nil && candidatePath == executablePath
     }
 
     deinit { invalidate() }

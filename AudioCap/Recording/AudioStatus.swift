@@ -29,39 +29,40 @@ enum AudioStatus {
         return text
     }
 
+    /// Meanings are localised; the four-char code and number stay as they are, so reports stay searchable.
     private static let knownCodeList: [(OSStatus, String)] = [
-        (kAudioHardwareNotRunningError, "the audio hardware is not running"),
-        (kAudioHardwareUnspecifiedError, "unspecified audio hardware error"),
-        (kAudioHardwareUnknownPropertyError, "unknown property"),
-        (kAudioHardwareBadPropertySizeError, "bad property size"),
-        (kAudioHardwareIllegalOperationError, "illegal operation"),
-        (kAudioHardwareBadObjectError, "the audio object no longer exists"),
-        (kAudioHardwareBadDeviceError, "the audio device no longer exists"),
-        (kAudioHardwareBadStreamError, "the audio stream no longer exists"),
-        (kAudioHardwareUnsupportedOperationError, "unsupported operation"),
-        (kAudioHardwareNotReadyError, "the audio device is not ready"),
-        (kAudioDeviceUnsupportedFormatError, "the device does not support this format"),
-        (kAudioDevicePermissionsError, "permission denied (check the audio recording permission)"),
-        (kAudioFormatUnsupportedDataFormatError, "unsupported data format"),
-        (kAudioFormatUnsupportedPropertyError, "unsupported format property"),
-        (kAudioFormatBadPropertySizeError, "bad format property size"),
-        (kAudioFormatUnknownFormatError, "unknown audio format"),
-        (kAudioFileUnsupportedDataFormatError, "the file type does not support this data format"),
-        (kAudioFileUnsupportedFileTypeError, "unsupported file type"),
-        (kAudioFileInvalidFileError, "the file is malformed or damaged"),
-        (kAudioFilePermissionsError, "no permission to write the file"),
-        (kAudioFileNotOptimizedError, "the file is not optimized"),
-        (kAudioConverterErr_FormatNotSupported, "the converter does not support this format"),
-        (kAudioConverterErr_InvalidInputSize, "invalid converter input size"),
-        (kAudioConverterErr_InvalidOutputSize, "invalid converter output size"),
-        (kAudioConverterErr_RequiresPacketDescriptionsError, "packet descriptions required"),
-        (kAudioConverterErr_InputSampleRateOutOfRange, "input sample rate out of range"),
-        (kAudioConverterErr_OutputSampleRateOutOfRange, "output sample rate out of range"),
-        (kExtAudioFileError_InvalidDataFormat, "invalid data format for this file"),
-        (kExtAudioFileError_NonPCMClientFormat, "the client format must be PCM"),
-        (OSStatus(-50), "invalid parameter"),
-        (OSStatus(-43), "file not found"),
-        (OSStatus(-54), "file permission denied (sandbox?)"),
+        (kAudioHardwareNotRunningError, String(localized: "the audio hardware is not running")),
+        (kAudioHardwareUnspecifiedError, String(localized: "unspecified audio hardware error")),
+        (kAudioHardwareUnknownPropertyError, String(localized: "unknown property")),
+        (kAudioHardwareBadPropertySizeError, String(localized: "bad property size")),
+        (kAudioHardwareIllegalOperationError, String(localized: "illegal operation")),
+        (kAudioHardwareBadObjectError, String(localized: "the audio object no longer exists")),
+        (kAudioHardwareBadDeviceError, String(localized: "the audio device no longer exists")),
+        (kAudioHardwareBadStreamError, String(localized: "the audio stream no longer exists")),
+        (kAudioHardwareUnsupportedOperationError, String(localized: "unsupported operation")),
+        (kAudioHardwareNotReadyError, String(localized: "the audio device is not ready")),
+        (kAudioDeviceUnsupportedFormatError, String(localized: "the device does not support this format")),
+        (kAudioDevicePermissionsError, String(localized: "permission denied (check the audio recording permission)")),
+        (kAudioFormatUnsupportedDataFormatError, String(localized: "unsupported data format")),
+        (kAudioFormatUnsupportedPropertyError, String(localized: "unsupported format property")),
+        (kAudioFormatBadPropertySizeError, String(localized: "bad format property size")),
+        (kAudioFormatUnknownFormatError, String(localized: "unknown audio format")),
+        (kAudioFileUnsupportedDataFormatError, String(localized: "the file type does not support this data format")),
+        (kAudioFileUnsupportedFileTypeError, String(localized: "unsupported file type")),
+        (kAudioFileInvalidFileError, String(localized: "the file is malformed or damaged")),
+        (kAudioFilePermissionsError, String(localized: "no permission to write the file")),
+        (kAudioFileNotOptimizedError, String(localized: "the file is not optimized")),
+        (kAudioConverterErr_FormatNotSupported, String(localized: "the converter does not support this format")),
+        (kAudioConverterErr_InvalidInputSize, String(localized: "invalid converter input size")),
+        (kAudioConverterErr_InvalidOutputSize, String(localized: "invalid converter output size")),
+        (kAudioConverterErr_RequiresPacketDescriptionsError, String(localized: "packet descriptions required")),
+        (kAudioConverterErr_InputSampleRateOutOfRange, String(localized: "input sample rate out of range")),
+        (kAudioConverterErr_OutputSampleRateOutOfRange, String(localized: "output sample rate out of range")),
+        (kExtAudioFileError_InvalidDataFormat, String(localized: "invalid data format for this file")),
+        (kExtAudioFileError_NonPCMClientFormat, String(localized: "the client format must be PCM")),
+        (OSStatus(-50), String(localized: "invalid parameter")),
+        (OSStatus(-43), String(localized: "file not found")),
+        (OSStatus(-54), String(localized: "file permission denied (sandbox?)")),
     ]
 }
 
@@ -70,7 +71,7 @@ struct CoreAudioError: LocalizedError, Equatable {
     var operation: String
     var status: OSStatus
 
-    var errorDescription: String? { "\(operation) failed with \(AudioStatus.describe(status))." }
+    var errorDescription: String? { String(localized: "\(operation) failed with \(AudioStatus.describe(status)).") }
 }
 
 extension Error {
@@ -82,7 +83,7 @@ extension Error {
         if let error = self as? CoreAudioError { return error.errorDescription ?? "\(error)" }
         let nsError = self as NSError
         if nsError.domain == NSOSStatusErrorDomain || nsError.domain.hasPrefix("com.apple.coreaudio") {
-            return "\(nsError.domain) error \(AudioStatus.describe(OSStatus(truncatingIfNeeded: nsError.code)))."
+            return String(localized: "\(nsError.domain) error \(AudioStatus.describe(OSStatus(truncatingIfNeeded: nsError.code))).")
         }
         if let error = self as? LocalizedError, let description = error.errorDescription { return description }
         return nsError.localizedDescription
@@ -90,6 +91,9 @@ extension Error {
 }
 
 /// Throws a `CoreAudioError` when `status` is not `noErr`.
-func checkStatus(_ status: OSStatus, _ operation: @autoclosure () -> String) throws {
-    guard status == noErr else { throw CoreAudioError(operation: operation(), status: status) }
+///
+/// `operation` is localised, so pass a literal such as `"Creating the process tap"` (interpolate `.description` for
+/// CoreAudio structs).
+func checkStatus(_ status: OSStatus, _ operation: @autoclosure () -> String.LocalizationValue) throws {
+    guard status == noErr else { throw CoreAudioError(operation: String(localized: operation()), status: status) }
 }

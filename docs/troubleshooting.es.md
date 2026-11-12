@@ -25,9 +25,7 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 
 ## Permiso
 
-AudioCap necesita el permiso de **grabación de audio del sistema**. La primera vez, macOS pregunta si AudioCap puede grabar el audio del sistema: pulsa **Permitir**. Al empezar a grabar, macOS también puede pedir acceso al micrófono.
-
-![Aviso de micrófono al empezar a grabar](images/en/microphone-prompt.png)
+AudioCap necesita el permiso de **grabación de audio del sistema**. La primera vez, macOS pregunta si AudioCap puede grabar el audio del sistema: pulsa **Permitir**.
 
 Si pulsaste **No permitir** o el aviso no aparece:
 
@@ -51,6 +49,7 @@ Las compilaciones con firma ad hoc (lo que hace `./start.sh` si no hay Team ID) 
 
 - Un WAV de 4096 bytes justos y sin duración solo tiene la cabecera: no llegó audio al archivo. Es lo que hace el motor original cuando no consigue crear sus búferes (en el registro aparece "Failed to create PCM buffer"). El motor nuevo lo muestra como error.
 - Si los reproductores siguen sonando después de la duración que indican, o un FLAC se corta antes de tiempo, compara la duración de la cabecera con la decodificada como se explica en [`.agents/skills/audiocap-audio-quality/SKILL.md`](../.agents/skills/audiocap-audio-quality/SKILL.md#duration-check-header-vs-decoded).
+- Que una toma avise de que "El audio se cortó de golpe" (o "empezó de golpe") donde el original se corta de verdad a pleno volumen es lo esperado: AudioCap no puede distinguir un corte real de que CoreAudio entregue ceros, así que avisa en ambos casos. Escucha ese punto antes de descartar la toma.
 
 ## La grabación no tiene la calidad del original
 

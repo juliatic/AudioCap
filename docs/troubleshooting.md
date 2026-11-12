@@ -25,9 +25,7 @@ python3 -c 'import struct,sys; print(struct.pack(">i", int(sys.argv[1])))' 17184
 
 ## Permission
 
-AudioCap needs **System Audio Recording** permission. On first use macOS shows "“AudioCap” would like access to record your system audio." Click **Allow**. macOS may also ask for microphone access when you start a recording.
-
-![Microphone prompt when a recording starts](images/en/microphone-prompt.png)
+AudioCap needs **System Audio Recording** permission. On first use macOS shows "“AudioCap” would like access to record your system audio." Click **Allow**.
 
 If you clicked **Don't Allow**, or the prompt never appears:
 
@@ -51,6 +49,7 @@ Ad-hoc builds (the default `./start.sh` build without a Team ID) get a new signa
 
 - A WAV of exactly 4,096 bytes with no duration contains only a header: no audio reached the file. This is what the original engine produces when it cannot build its buffers (the log says "Failed to create PCM buffer"). The new engine reports that as an error instead.
 - If players keep playing after the shown length, or a FLAC ends early, compare the header and decoded durations as described in [`.agents/skills/audiocap-audio-quality/SKILL.md`](../.agents/skills/audiocap-audio-quality/SKILL.md#duration-check-header-vs-decoded).
+- A take that warns "Audio stopped abruptly" (or "started abruptly") where the source really cuts at full level is expected: AudioCap cannot tell a real hard cut from CoreAudio delivering zeros, so it warns in both cases. Listen to that spot before discarding the take.
 
 ## The recording is not at the source's quality
 
