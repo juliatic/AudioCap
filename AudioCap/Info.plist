@@ -4,5 +4,7 @@
 <dict>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Please allow access in order to capture audio from other apps.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>AudioCap asks Music for the sample rate of the current track so Hi-Res recordings match it.</string>
 </dict>
 </plist>

@@ -1,0 +1,256 @@
+import AppKit
+import CoreAudio
+import Observation
+import OSLog
+
+/// Orchestrates Hi-Res mode for a recording: rate policy, routing, monitor and restoring the output.
+///
+/// The recorder calls `begin(for:)` before starting the tap, `formatChanged(_:)` whenever the capture format is known or
+/// changes, and `end()` when it stops. Quitting restores the output; the next launch does too after a crash.
+@MainActor
+@Observable
+final class HiResController {
+    static let shared = HiResController()
+
+    let settings: HiResSettings
+    private(set) var isDriverAvailable = false
+    private(set) var rateDecision: HiResRatePolicy.Decision?
+    private(set) var monitorDevice: AudioOutputDevice?
+    private(set) var monitorOutputRate: Double?
+    /// Last notice for the UI (device lost, start failure, crash recovery). Localized.
+    private(set) var message: String?
+
+    /// Mirrors the router so views refresh when a take is routed or restored (Settings is disabled while routed).
+    private(set) var isRouted = false
+    /// The monitor while routed; the recorder pushes captured buffers into it on its capture queue.
+    var activeMonitor: AudioMonitor? { router.isRouted ? monitor : nil }
+
+    var monitorVolume: Float {
+        get { settings.monitorVolume }
+        set { settings.monitorVolume = newValue; monitor.volume = newValue }
+    }
+
+    var isMonitorMuted: Bool {
+        get { settings.isMonitorMuted }
+        set { settings.isMonitorMuted = newValue; monitor.isMuted = newValue }
+    }
+
+    @ObservationIgnored private let system: AudioOutputSystem
+    @ObservationIgnored private let router: HiResRouter
+    @ObservationIgnored private let monitor = AudioMonitor()
+    @ObservationIgnored private weak var tap: ProcessTap?
+    @ObservationIgnored private var captureFormat: CaptureFormat?
+    @ObservationIgnored private var deviceListListener: AudioPropertyListener?
+    @ObservationIgnored private var routeListeners: [AudioPropertyListener] = []
+    @ObservationIgnored private var musicObserver: NSObjectProtocol?
+    @ObservationIgnored private var terminateObserver: NSObjectProtocol?
+    @ObservationIgnored private var didRecover = false
+    /// Bumped on every fresh monitor start and on `end()`, so a pending retry of an older start is dropped.
+    @ObservationIgnored private var monitorAttempt = 0
+    @ObservationIgnored private let logger = Logger(subsystem: kAppSubsystem, category: "HiResController")
+    @ObservationIgnored var monitorRetryDelay: Duration = .milliseconds(500)
+
+    init(settings: HiResSettings = .shared, system: AudioOutputSystem = CoreAudioOutputSystem(), store: HiResRestoreStore = HiResRestoreStore()) {
+        self.settings = settings
+        self.system = system
+        self.router = HiResRouter(system: system, store: store)
+        monitor.volume = settings.monitorVolume
+        monitor.isMuted = settings.isMonitorMuted
+    }
+
+    /// Call once at launch: restores an output left on the Hi-Res device by a crash and watches for the driver.
+    func recoverOnLaunch() {
+        guard !didRecover else { return }
+        didRecover = true
+        QualityPathContributors.register(HiResQualityContributor.shared)
+        if let restored = router.recoverAfterCrash() {
+            message = String(localized: "Restored the output to \(restored.name) after AudioCap last quit unexpectedly.")
+        }
+        isDriverAvailable = router.isVirtualDeviceAvailable
+        deviceListListener = try? AudioPropertyListener(objectID: .system, selector: kAudioHardwarePropertyDevices) { [weak self] in
+            self?.deviceListChanged()
+        }
+        terminateObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    // MARK: - Recording hooks
+
+    /// Routes the system output to the Hi-Res device (when enabled and installed) and rebuilds `tap`'s aggregate on it.
+    func begin(for tap: ProcessTap) {
+        recoverOnLaunch()
+        guard beginRoute(sourceBundleID: tap.process.bundleID, tap: tap) else { return }
+        tap.syncAggregateWithDefaultOutput()
+    }
+
+    /// The routing part of `begin(for:)`. Returns `false` when Hi-Res stays out of this take (off, no driver, routed).
+    @discardableResult
+    func beginRoute(sourceBundleID: String?, tap: ProcessTap? = nil) -> Bool {
+        isDriverAvailable = router.isVirtualDeviceAvailable
+        guard settings.isEnabled, isDriverAvailable, !router.isRouted else { return false }
+        self.tap = tap
+        message = nil
+
+        let isMusic = sourceBundleID == HiResRatePolicy.musicBundleID
+        let trackRate = isMusic ? MusicTrackRate.fetch(timeout: 1.5) { [weak self] rate in self?.applyMusicRate(rate) } : nil
+        let decision = HiResRatePolicy.decide(sourceBundleID: sourceBundleID, musicTrackRate: trackRate, fixedRate: settings.fixedRate)
+        do {
+            let target = try router.route(rate: decision.rate)
+            rateDecision = decision
+            monitorDevice = target
+            installRouteListeners(observeMusic: isMusic)
+        } catch {
+            logger.error("Hi-Res routing failed: \(error.audioCapDescription, privacy: .public)")
+            message = String(localized: "Hi-Res could not start: \(error.audioCapDescription). Recording without it.")
+            self.tap = nil
+        }
+        isRouted = router.isRouted
+        return true
+    }
+
+    /// The capture format is known or changed: (re)starts the monitor at that rate.
+    func formatChanged(_ format: CaptureFormat) {
+        captureFormat = format
+        guard router.isRouted else { return }
+        restartMonitor()
+    }
+
+    /// Stops the monitor and restores the remembered output.
+    func end() {
+        removeRouteListeners()
+        monitorAttempt += 1
+        monitor.stop()
+        monitorOutputRate = nil
+        captureFormat = nil
+        guard router.isRouted else { return }
+        router.restore()
+        isRouted = router.isRouted
+        rateDecision = nil
+        monitorDevice = nil
+        tap?.syncAggregateWithDefaultOutput()
+        tap = nil
+    }
+
+    /// The Hi-Res route the next take of `sourceBundleID` would use, while idle with Hi-Res on and the driver installed.
+    /// The rate is the fixed rate for Music too, because its track rate is only read when a take starts.
+    func nextTake(sourceBundleID: String?) -> (monitor: AudioOutputDevice, rate: Double)? {
+        // Read both so a view using this is refreshed when Hi-Res is turned off or the driver goes away.
+        let isEnabled = settings.isEnabled, isDriverAvailable = isDriverAvailable
+        guard isEnabled, isDriverAvailable else { return nil }
+        let decision = HiResRatePolicy.decide(sourceBundleID: sourceBundleID, musicTrackRate: nil, fixedRate: settings.fixedRate)
+        guard case .routed(let monitor, let rate) = router.nextRoute(rate: decision.rate) else { return nil }
+        return (monitor, rate)
+    }
+
+    /// Turning Hi-Res off mid-session takes effect at the next Start; a routed session stays routed until Stop.
+    func logEnabledChanged() {
+        let route = router.rate.map { "routed at \($0) Hz until Stop" } ?? "not routed"
+        logger.info("Hi-Res mode turned \(self.settings.isEnabled ? "on" : "off", privacy: .public) (\(route, privacy: .public))")
+    }
+
+    var diagnosticsLines: [String] {
+        var lines = ["Hi-Res: enabled \(settings.isEnabled), driver \(isDriverAvailable ? "available" : "missing"), fixed rate \(settings.fixedRate) Hz"]
+        if let rate = router.rate { lines.append("Hi-Res routed at \(rate) Hz (\(rateDecision.map { "\($0.source)" } ?? "-")), monitor: \(monitorDevice?.name ?? "-") at \(monitorOutputRate.map { "\($0) Hz" } ?? "-")") }
+        return lines
+    }
+
+    // MARK: - Events
+
+    /// Starts the monitor; a failure is retried once after `monitorRetryDelay` (the real output can refuse to start
+    /// with 'nope' while CoreAudio is still applying the switch to the Hi-Res device) before it is shown.
+    private func restartMonitor(isRetry: Bool = false) {
+        guard let format = captureFormat, let device = router.monitorTarget else { return }
+        if !isRetry { monitorAttempt += 1 }
+        let attempt = monitorAttempt
+        do {
+            try monitor.start(format: format, device: device, deviceID: system.deviceID(uid: device.uid))
+            monitorDevice = device
+            monitorOutputRate = monitor.outputSampleRate
+            if isRetry { logger.info("Monitor started on the second attempt") }
+        } catch {
+            logger.error("Monitor failed\(isRetry ? " again" : "", privacy: .public): \(error.audioCapDescription, privacy: .public)")
+            monitorOutputRate = nil
+            guard isRetry else {
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: self?.monitorRetryDelay ?? .zero)
+                    guard let self, attempt == monitorAttempt, router.isRouted else { return }
+                    restartMonitor(isRetry: true)
+                }
+                return
+            }
+            let detail = (error as? AudioMonitor.StartError)?.underlying.audioCapDescription ?? error.audioCapDescription
+            message = String(localized: "Monitor unavailable on \(device.name): \(detail) The recording is not affected.")
+        }
+    }
+
+    private func handle(_ event: HiResRouter.Event?) {
+        switch event {
+        case .monitorTargetChanged(let device):
+            monitorDevice = device
+            restartMonitor()
+        case .virtualDeviceLost(let restored):
+            let name = restored?.name ?? "-"
+            message = String(localized: "AudioCap Hi-Res disappeared. The output is back on \(name); recording continues at that device's rate.")
+            removeRouteListeners()
+            monitorAttempt += 1
+            monitor.stop()
+            isRouted = router.isRouted
+            rateDecision = nil
+            monitorDevice = nil
+            monitorOutputRate = nil
+        case nil:
+            break
+        }
+    }
+
+    private func deviceListChanged() {
+        isDriverAvailable = router.isVirtualDeviceAvailable
+        handle(router.deviceListChanged())
+    }
+
+    private func nominalRateChanged() {
+        guard router.isRouted, let tap, let rate = try? system.deviceID(uid: HiResDevice.uid).readNominalSampleRate(),
+              rate != tap.aggregateSampleRate else { return }
+        logger.info("\(HiResDevice.name, privacy: .public) now runs at \(rate, privacy: .public) Hz; rebuilding the tap")
+        tap.forceReconfigure(reason: "Hi-Res rate changed to \(rate) Hz")
+    }
+
+    private func applyMusicRate(_ rate: Double?) {
+        guard router.isRouted, let tap else { return }
+        let decision = HiResRatePolicy.decide(sourceBundleID: tap.process.bundleID, musicTrackRate: rate, fixedRate: settings.fixedRate)
+        guard decision != rateDecision else { return }
+        do {
+            try router.setRate(decision.rate)
+            rateDecision = decision
+            nominalRateChanged()
+        } catch {
+            logger.error("Could not apply the Music track rate: \(error.audioCapDescription, privacy: .public)")
+        }
+    }
+
+    private func installRouteListeners(observeMusic: Bool) {
+        removeRouteListeners()
+        if let listener = try? AudioPropertyListener(objectID: .system, selector: kAudioHardwarePropertyDefaultOutputDevice, handler: { [weak self] in
+            guard let self else { return }
+            handle(router.defaultOutputChanged())
+        }) { routeListeners.append(listener) }
+        if let id = try? system.deviceID(uid: HiResDevice.uid),
+           let listener = try? AudioPropertyListener(objectID: id, selector: kAudioDevicePropertyNominalSampleRate, handler: { [weak self] in
+               self?.nominalRateChanged()
+           }) { routeListeners.append(listener) }
+        if observeMusic {
+            musicObserver = DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.Music.playerInfo"), object: nil, queue: .main) { [weak self] _ in
+                MusicTrackRate.fetch { rate in
+                    DispatchQueue.main.async { MainActor.assumeIsolated { self?.applyMusicRate(rate) } }
+                }
+            }
+        }
+    }
+
+    private func removeRouteListeners() {
+        routeListeners.removeAll()
+        if let musicObserver { DistributedNotificationCenter.default().removeObserver(musicObserver) }
+        musicObserver = nil
+    }
+}

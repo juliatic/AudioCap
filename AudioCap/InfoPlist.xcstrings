@@ -1,0 +1,42 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSAppleEventsUsageDescription" : {
+      "comment" : "Shown in the macOS Automation prompt the first time AudioCap asks Music for the track rate.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AudioCap asks Music for the sample rate of the current track so Hi-Res recordings match it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AudioCap pregunta a Música la frecuencia de muestreo de la pista actual para que las grabaciones Hi-Res coincidan con ella."
+          }
+        }
+      }
+    },
+    "NSAudioCaptureUsageDescription" : {
+      "comment" : "Shown in the macOS audio-capture permission prompt.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please allow access in order to capture audio from other apps."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permite el acceso para grabar el audio de otras apps."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

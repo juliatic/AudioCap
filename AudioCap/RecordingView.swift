@@ -6,51 +6,60 @@ import Observation
 struct RecordingView: View {
     let recorder: ProcessTapRecorder
 
-    @State private var lastRecordingURL: URL?
     @State private var settings = RecordingSettings.shared
-    @State private var showConversionSheet = false
+    @State private var copiedDiagnostics = false
 
     var body: some View {
         Section {
             HStack {
                 if recorder.isRecording {
-                    Button("Stop") {
-                        if settings.outputFormat != .wav {
-                            recorder.stop()
-                            showConversionSheet = true
-                        } else {
-                            recorder.stop()
-                        }
+                    Button(readable: "Stop") {
+                        recorder.stop()
                     }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help(Text("Stop recording (⌘R)"))
                     .id("button")
                 } else {
-                    Button("Start") {
+                    Button(readable: "Start") {
                         handlingErrors { try recorder.start() }
                     }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help(Text("Start recording (⌘R)"))
+                    .disabled(recorder.isConverting)
                     .id("button")
 
-                    if let lastRecordingURL {
-                        FileProxyView(url: lastRecordingURL)
+                    if let url = recorder.lastCompletedURL {
+                        FileProxyView(url: url)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
+
+                Spacer()
+
+                if recorder.isRecording {
+                    LevelMeterView(level: recorder.level)
+                        .frame(width: 240)
+                    Text(timeString(recorder.framesWritten))
+                        .monospacedDigit()
+                        .secondaryTextStyle()
+                        .accessibilityLabel(Text("Recorded time"))
+                }
             }
             .animation(.smooth, value: recorder.isRecording)
-            .animation(.smooth, value: lastRecordingURL)
-            .onChange(of: recorder.isRecording) { _, newValue in
-                if !newValue {
-                    if settings.outputFormat == .wav {
-                        lastRecordingURL = recorder.fileURL
-                    } else {
-                        lastRecordingURL = nil
-                    }
-                }
+            .animation(.smooth, value: recorder.lastCompletedURL)
+
+            if let format = recorder.captureFormat {
+                LabeledContent("Capture format", value: format.displayDescription)
             }
-            .onChange(of: recorder.isConverting) { _, isConverting in
-                if !isConverting {
-                    lastRecordingURL = recorder.lastConvertedURL
-                }
+
+            HiResStatusView()
+
+            if recorder.status == .waitingForSource {
+                Text("Waiting for \(recorder.process.name) to start again…")
+                    .secondaryTextStyle()
             }
+
+            AutoRecordControls(recorder: recorder)
 
             // Recording settings
             VStack(alignment: .leading, spacing: 8) {
@@ -58,110 +67,105 @@ struct RecordingView: View {
                     Text("Auto-split on silence")
                 }
                 .tint(.green)
-                .accessibilityLabel(Text("Auto-split on silence"))
+                .disabled(isLocked || recorder.mode == .waitForSound)
 
                 HStack(spacing: 8) {
                     LabeledContent("Format") {
                         Picker("Format", selection: $settings.outputFormat) {
                             ForEach(RecordingSettings.OutputFormat.allCases, id: \.self) { format in
-                                Text(format.displayName).tag(format)
+                                Text(format.displayName).font(AppStyle.body).tag(format)
                             }
                         }
+                        .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(width: 150)
-                        .disabled(recorder.isRecording) // lock format while recording
+                        .frame(width: 260)
+                        .disabled(isLocked)
                     }
                 }
 
                 HStack(spacing: 8) {
                     LabeledContent("Threshold (dB)") {
-                        TextField("", value: $settings.silenceThresholdDb, format: .number)
+                        TextField("Threshold (dB)", value: $settings.silenceThresholdDb, format: .number)
+                            .labelsHidden()
                             .frame(width: 80)
                             .textFieldStyle(.roundedBorder)
+                            .font(AppStyle.body)
                     }
                     LabeledContent("Min silence (s)") {
-                        TextField("", value: $settings.minSilenceDuration, format: .number)
+                        TextField("Min silence (s)", value: $settings.minSilenceDuration, format: .number)
+                            .labelsHidden()
                             .frame(width: 80)
                             .textFieldStyle(.roundedBorder)
+                            .font(AppStyle.body)
                     }
                 }
-                // Keep inputs looking like editable fields
+                .disabled(isLocked)
             }
-            // Allow editing threshold/min during recording; changes apply to next session
+
+            if let warning = recorder.silenceWarning {
+                Label(warning, systemImage: "speaker.slash")
+                    .warningTextStyle()
+            }
+
+            if let error = recorder.lastError {
+                Text(error)
+                    .errorTextStyle()
+                    .textSelection(.enabled)
+            }
+
+            HStack {
+                Button(readable: "Show Recordings in Finder") {
+                    NSWorkspace.shared.open(recorder.outputDirectory)
+                }
+                Spacer()
+                Button(readable: copiedDiagnostics ? LocalizedStringKey("Copied") : LocalizedStringKey("Copy Diagnostics")) {
+                    Diagnostics.copyToPasteboard(recorder.diagnosticsReport())
+                    copiedDiagnostics = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedDiagnostics = false }
+                }
+            }
         } header: {
             HStack {
                 RecordingIndicator(appIcon: recorder.process.icon, isRecording: recorder.isRecording)
+                    .accessibilityHidden(true)
 
-                Text(recorder.isRecording ? "Recording from \(recorder.process.name)" : (recorder.isConverting ? "Converting…" : "Ready to Record from \(recorder.process.name)"))
-                    .font(.headline)
+                Text(headerTitle)
+                    .font(AppStyle.headline)
                     .contentTransition(.identity)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
         }
-        .sheet(isPresented: $showConversionSheet) {
-            VStack(alignment: .leading, spacing: 12) {
-                if recorder.isConverting {
-                    Text("Converting to \(settings.outputFormat.displayName)…")
-                        .font(.headline)
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Files will be saved in:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(recorder.fileURL.deletingLastPathComponent().path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                } else {
-                    if let url = recorder.lastConvertedURL {
-                        Text("Conversion complete.")
-                            .font(.headline)
-                        Text("Saved to:")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text(url.path)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                        HStack(spacing: 8) {
-                            Button("Show in Finder") {
-                                NSWorkspace.shared.activateFileViewerSelecting([url])
-                            }
-                            Button("Close") {
-                                showConversionSheet = false
-                                lastRecordingURL = url
-                            }
-                        }
-                    } else {
-                        Text("Conversion complete.")
-                            .font(.headline)
-                        Text("Saved in:")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text(recorder.fileURL.deletingLastPathComponent().path)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                        HStack(spacing: 8) {
-                            Button("Show in Finder") {
-                                NSWorkspace.shared.open(recorder.fileURL.deletingLastPathComponent())
-                            }
-                            Button("Close") {
-                                showConversionSheet = false
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(20)
-            .frame(minWidth: 420)
-        }
+    }
+
+    /// Settings and the start button stay locked while a take is recorded or exported.
+    private var isLocked: Bool { recorder.isRecording || recorder.isConverting }
+
+    private var headerTitle: String {
+        if recorder.isRecording { return String(localized: "Recording from \(recorder.process.name)") }
+        if recorder.isConverting { return String(localized: "Exporting…") }
+        return String(localized: "Ready to Record from \(recorder.process.name)")
+    }
+
+    private func timeString(_ frames: Int64) -> String {
+        let rate = recorder.captureFormat?.sampleRate ?? 48_000
+        let seconds = Int(Double(frames) / rate)
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private func handlingErrors(perform block: () throws -> Void) {
         do {
             try block()
         } catch {
-            /// "handling" in the function name might not be entirely true 😅
-            NSAlert(error: error).runModal()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "Recording could not start")
+            alert.informativeText = error.audioCapDescription
+            alert.addButton(withTitle: String(localized: "OK"))
+            alert.addButton(withTitle: String(localized: "Copy Diagnostics"))
+            if alert.runModal() == .alertSecondButtonReturn {
+                Diagnostics.copyToPasteboard(recorder.diagnosticsReport())
+            }
         }
     }
 }
-

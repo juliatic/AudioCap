@@ -7,23 +7,40 @@ import UniformTypeIdentifiers
 final class RecordingSettings {
     static let shared = RecordingSettings()
 
-    enum OutputFormat: String, CaseIterable, Hashable {
+    /// The format a take is exported to when recording stops. Capture always goes to a CAF intermediate first.
+    enum OutputFormat: String, CaseIterable, Hashable, Sendable {
+        /// Float32 WAV: the captured samples, unchanged ("raw").
         case wav
-        case m4a
+        /// FLAC, 24-bit.
         case flac
+        /// Apple Lossless (ALAC, 24-bit) in an M4A container.
+        case alac
+        /// AAC 256 kbps in an M4A container. Lossy. The raw value keeps the setting stored by older versions.
+        case aac = "m4a"
 
         var displayName: String {
             switch self {
-            case .wav: "WAV"
-            case .m4a: "M4A (AAC)"
-            case .flac: "FLAC"
+            case .wav: String(localized: "WAV (Float32, raw)")
+            case .flac: String(localized: "FLAC (24-bit)")
+            case .alac: String(localized: "ALAC (24-bit)")
+            case .aac: String(localized: "AAC 256 kbps (lossy)")
+            }
+        }
+
+        var isLossy: Bool { self == .aac }
+
+        var fileExtension: String {
+            switch self {
+            case .wav: "wav"
+            case .flac: "flac"
+            case .alac, .aac: "m4a"
             }
         }
 
         var utType: UTType {
             switch self {
             case .wav: .wav
-            case .m4a: .mpeg4Audio
+            case .alac, .aac: .mpeg4Audio
             case .flac:
                 // Some macOS versions do not provide UTType.flac; construct from extension and fallback
                 UTType(filenameExtension: "flac") ?? .audio
